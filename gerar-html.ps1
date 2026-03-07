@@ -46,7 +46,7 @@ $html = @"
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório Informark</title>
+    <title>Relat&oacute;rio Informark</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -108,8 +108,8 @@ $html = @"
 <body>
     <div class="container">
         <div class="card">
-            <h1>Relatório Informark</h1>
-            <div class="meta">Última atualização: $atualizadoEm</div>
+            <h1>Relat&oacute;rio Informark</h1>
+            <div class="meta">&Uacute;ltima atualiza&ccedil;&atilde;o: $atualizadoEm</div>
             <div class="meta">Arquivo base: $nomeArquivo</div>
 
             <input type="text" id="busca" placeholder="Buscar por qualquer campo...">
