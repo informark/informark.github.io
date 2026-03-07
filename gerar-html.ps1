@@ -147,6 +147,6 @@ $tbody
 "@
 
 $destino = Join-Path $docs "index.html"
-Set-Content -Path $destino -Value $html -Encoding UTF8
+[System.IO.File]::WriteAllText($destino, $html, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "HTML gerado em docs\index.html"
