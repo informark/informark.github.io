@@ -23,7 +23,8 @@ function Nova-TabelaHtml {
 
     $thead = ""
     foreach ($col in $colunas) {
-        $thead += "<th>$col</th>`n"
+        $colEscapado = [System.Net.WebUtility]::HtmlEncode([string]$col)
+        $thead += "<th>$colEscapado</th>`n"
     }
 
     $tbody = ""
@@ -87,30 +88,36 @@ $html = @"
             padding: 20px;
             color: #111827;
         }
+
         .container {
             max-width: 1320px;
             margin: 0 auto;
         }
+
         .card {
             background: #ffffff;
             border-radius: 16px;
             padding: 20px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
+
         h1 {
             margin-top: 0;
             margin-bottom: 10px;
         }
+
         .meta {
             color: #6b7280;
             margin-bottom: 8px;
         }
+
         .tabs {
             display: flex;
             gap: 10px;
             margin: 20px 0 15px 0;
             flex-wrap: wrap;
         }
+
         .tab-btn {
             border: none;
             background: #e5e7eb;
@@ -121,27 +128,33 @@ $html = @"
             font-size: 15px;
             font-weight: bold;
         }
+
         .tab-btn.active {
             background: #111827;
             color: white;
         }
+
         .tab-content {
             display: none;
         }
+
         .tab-content.active {
             display: block;
         }
+
         .subtitulo {
             margin-top: 10px;
             margin-bottom: 8px;
             font-weight: bold;
         }
+
         .filtros {
             display: grid;
-            grid-template-columns: repeat(4, minmax(180px, 1fr));
+            grid-template-columns: repeat(5, minmax(160px, 1fr));
             gap: 10px;
             margin: 15px 0;
         }
+
         input, select {
             width: 100%;
             padding: 12px;
@@ -151,30 +164,36 @@ $html = @"
             box-sizing: border-box;
             background: white;
         }
+
         .table-wrap {
             overflow-x: auto;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
             min-width: 900px;
             background: white;
         }
+
         th, td {
             padding: 10px 12px;
             border-bottom: 1px solid #e5e7eb;
             text-align: left;
             white-space: nowrap;
         }
+
         th {
             background: #111827;
             color: white;
             position: sticky;
             top: 0;
         }
+
         tr:hover td {
             background: #f9fafb;
         }
+
         .resumo {
             font-size: 14px;
             color: #4b5563;
@@ -184,6 +203,14 @@ $html = @"
         @media (max-width: 900px) {
             .filtros {
                 grid-template-columns: 1fr;
+            }
+
+            body {
+                padding: 12px;
+            }
+
+            .card {
+                padding: 16px;
             }
         }
     </style>
@@ -204,6 +231,9 @@ $html = @"
 
                 <div class="filtros">
                     <input type="text" id="buscaRelatorio" placeholder="Buscar no relat&oacute;rio...">
+                    <select id="produtoRelatorio">
+                        <option value="">Todos os produtos</option>
+                    </select>
                     <select id="modeloRelatorio">
                         <option value="">Todos os modelos</option>
                     </select>
@@ -224,6 +254,9 @@ $html = @"
 
                 <div class="filtros">
                     <input type="text" id="buscaPrecos" placeholder="Buscar na planilha de pre&ccedil;os...">
+                    <select id="produtoPrecos">
+                        <option value="">Todos os produtos</option>
+                    </select>
                     <select id="modeloPrecos">
                         <option value="">Todos os modelos</option>
                     </select>
@@ -256,22 +289,28 @@ $html = @"
         }
 
         function detectarIndices(tabelaId) {
-            const ths = Array.from(document.querySelectorAll('#' + tabelaId + ' thead th')).map(th => th.innerText.trim().toLowerCase());
+            const ths = Array.from(document.querySelectorAll('#' + tabelaId + ' thead th'))
+                .map(th => th.innerText.trim().toLowerCase());
 
-            function acharIndice(palavras) {
-                for (let i = 0; i < ths.length; i++) {
-                    const nome = ths[i];
-                    for (const p of palavras) {
-                        if (nome.includes(p)) return i;
-                    }
+            function acharIndiceExatoOuParcial(prioridades) {
+                for (const termo of prioridades) {
+                    const exato = ths.findIndex(nome => nome === termo);
+                    if (exato >= 0) return exato;
                 }
+
+                for (const termo of prioridades) {
+                    const parcial = ths.findIndex(nome => nome.includes(termo));
+                    if (parcial >= 0) return parcial;
+                }
+
                 return -1;
             }
 
             return {
-                modelo: acharIndice(['modelo', 'produto', 'aparelho', 'iphone']),
-                gb: acharIndice(['gb', 'armazenamento', 'memoria', 'memória', 'capacidade']),
-                condicao: acharIndice(['condicao', 'condição', 'estado'])
+                produto: acharIndiceExatoOuParcial(['produto', 'tipo', 'categoria']),
+                modelo: acharIndiceExatoOuParcial(['modelo', 'nome modelo']),
+                gb: acharIndiceExatoOuParcial(['gb', 'armazenamento', 'memoria', 'memória', 'capacidade']),
+                condicao: acharIndiceExatoOuParcial(['condicao', 'condição', 'estado'])
             };
         }
 
@@ -302,6 +341,7 @@ $html = @"
             if (!tabela) return;
 
             const busca = document.getElementById(config.buscaId);
+            const produtoSelect = document.getElementById(config.produtoId);
             const modeloSelect = document.getElementById(config.modeloId);
             const gbSelect = document.getElementById(config.gbId);
             const condicaoSelect = document.getElementById(config.condicaoId);
@@ -316,6 +356,7 @@ $html = @"
             function popularFiltros() {
                 const linhas = obterLinhas();
 
+                const produtos = new Set();
                 const modelos = new Set();
                 const gbs = new Set();
                 const condicoes = new Set();
@@ -323,11 +364,13 @@ $html = @"
                 linhas.forEach(linha => {
                     const tds = linha.querySelectorAll('td');
 
+                    if (indices.produto >= 0 && tds[indices.produto]) produtos.add(tds[indices.produto].innerText.trim());
                     if (indices.modelo >= 0 && tds[indices.modelo]) modelos.add(tds[indices.modelo].innerText.trim());
                     if (indices.gb >= 0 && tds[indices.gb]) gbs.add(tds[indices.gb].innerText.trim());
                     if (indices.condicao >= 0 && tds[indices.condicao]) condicoes.add(tds[indices.condicao].innerText.trim());
                 });
 
+                preencherSelectComValores(config.produtoId, Array.from(produtos));
                 preencherSelectComValores(config.modeloId, Array.from(modelos));
                 preencherSelectComValores(config.gbId, Array.from(gbs));
                 preencherSelectComValores(config.condicaoId, Array.from(condicoes));
@@ -337,6 +380,7 @@ $html = @"
                 const linhas = obterLinhas();
 
                 const termo = (busca?.value || '').toLowerCase().trim();
+                const produto = (produtoSelect?.value || '').toLowerCase().trim();
                 const modelo = (modeloSelect?.value || '').toLowerCase().trim();
                 const gb = (gbSelect?.value || '').toLowerCase().trim();
                 const condicao = (condicaoSelect?.value || '').toLowerCase().trim();
@@ -347,16 +391,18 @@ $html = @"
                     const tds = linha.querySelectorAll('td');
                     const texto = linha.innerText.toLowerCase();
 
+                    const valorProduto = (indices.produto >= 0 && tds[indices.produto]) ? tds[indices.produto].innerText.toLowerCase().trim() : '';
                     const valorModelo = (indices.modelo >= 0 && tds[indices.modelo]) ? tds[indices.modelo].innerText.toLowerCase().trim() : '';
                     const valorGb = (indices.gb >= 0 && tds[indices.gb]) ? tds[indices.gb].innerText.toLowerCase().trim() : '';
                     const valorCondicao = (indices.condicao >= 0 && tds[indices.condicao]) ? tds[indices.condicao].innerText.toLowerCase().trim() : '';
 
                     const okBusca = !termo || texto.includes(termo);
+                    const okProduto = !produto || valorProduto === produto;
                     const okModelo = !modelo || valorModelo === modelo;
                     const okGb = !gb || valorGb === gb;
                     const okCondicao = !condicao || valorCondicao === condicao;
 
-                    const mostrar = okBusca && okModelo && okGb && okCondicao;
+                    const mostrar = okBusca && okProduto && okModelo && okGb && okCondicao;
                     linha.style.display = mostrar ? '' : 'none';
 
                     if (mostrar) visiveis++;
@@ -370,7 +416,7 @@ $html = @"
             popularFiltros();
             aplicarFiltros();
 
-            [busca, modeloSelect, gbSelect, condicaoSelect].forEach(el => {
+            [busca, produtoSelect, modeloSelect, gbSelect, condicaoSelect].forEach(el => {
                 if (el) {
                     el.addEventListener('input', aplicarFiltros);
                     el.addEventListener('change', aplicarFiltros);
@@ -381,6 +427,7 @@ $html = @"
         configurarFiltros({
             tabelaId: 'tabelaRelatorio',
             buscaId: 'buscaRelatorio',
+            produtoId: 'produtoRelatorio',
             modeloId: 'modeloRelatorio',
             gbId: 'gbRelatorio',
             condicaoId: 'condicaoRelatorio',
@@ -390,6 +437,7 @@ $html = @"
         configurarFiltros({
             tabelaId: 'tabelaPrecos',
             buscaId: 'buscaPrecos',
+            produtoId: 'produtoPrecos',
             modeloId: 'modeloPrecos',
             gbId: 'gbPrecos',
             condicaoId: 'condicaoPrecos',
@@ -403,4 +451,4 @@ $html = @"
 $destino = Join-Path $docs "index.html"
 [System.IO.File]::WriteAllText($destino, $html, [System.Text.UTF8Encoding]::new($false))
 
-Write-Host "HTML gerado em docs\index.html com filtros"
+Write-Host "HTML gerado em docs\index.html com filtros de produto, modelo, GB e condição"
