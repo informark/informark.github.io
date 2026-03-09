@@ -1624,10 +1624,15 @@ function extrairModeloIphoneDefinitivo(texto) {
   if (/\b(watch|apple watch|s\d{1,2}|ultra|mm)\b/i.test(t0)) return null;
 
   const t = t0
-    .replace(/[*_~]/g, "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  .replace(/[*_~]/g, "")
+  .toLowerCase()
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\bmaxxx+\b/g, "max")
+  .replace(/\bpromaxxx+\b/g, "pro max")
+  .replace(/\bpromaxx+\b/g, "pro max")
+  .replace(/\s+/g, " ")
+  .trim();
 
   // "SE" só deve contar como modelo quando vier junto de iPhone (evita "se encontra", etc.)
   const temSE = /\biphone\s*se\b/.test(t) || /\bip\s*se\b/.test(t) || (/\bse\b/.test(t) && /\b(2020|2022|2|2a|2ª|3|3a|3ª)\b/.test(t) && /\b(iphone|ip)\b/.test(t));
@@ -2140,6 +2145,51 @@ const series = m ? `S${m[1]}` : "";
   }
 
   return "Não informado";
+}
+
+function extrairVariacoesMesmoItem(texto) {
+  if (!texto) return [];
+
+  const produto = detectarProduto(texto);
+  if (produto !== "iPhone") return [];
+
+  const modelo = extrairModelo(texto, produto);
+  if (!modelo || modelo === "Não informado") return [];
+
+  const condicao = detectarCondicaoPorProduto(texto, produto);
+
+  const itens = [];
+  const re = /\(\s*(256|512|1024|1\s*tb)\s*(gb|tb)?\s*\)\s*\*?\s*(?:r\$|\$)\s*([\d.]+,\d{2}|[\d.]+)\*?/gi;
+
+  let m;
+  while ((m = re.exec(texto)) !== null) {
+    let armRaw = (m[1] || "").toString().trim().toUpperCase();
+    let unidade = (m[2] || "").toString().trim().toUpperCase();
+    const precoRaw = (m[3] || "").toString().trim();
+
+    let armazenamento = "";
+    if (armRaw === "1024" || armRaw === "1 TB") {
+      armazenamento = "1TB";
+    } else if (unidade === "TB") {
+      armazenamento = `${armRaw}TB`;
+    } else {
+      armazenamento = `${armRaw}GB`;
+    }
+
+    const preco = normalizarNumeroPreco(precoRaw);
+    if (!preco) continue;
+
+    itens.push({
+      produto,
+      modelo,
+      armazenamento,
+      condicao,
+      preco,
+      descricaoItem: texto,
+    });
+  }
+
+  return itens;
 }
 
 /* =========================
@@ -2851,7 +2901,11 @@ if (pareceTelefonePuro && textoSoDigitos.length >= 10 && textoSoDigitos.length <
 
     // LISTA: salva vários itens
     
-    const itensLista = extrairItensDeLista(texto);
+    let itensLista = extrairVariacoesMesmoItem(texto);
+
+if (!itensLista.length) {
+  itensLista = extrairItensDeLista(texto);
+}
 
     if (itensLista.length) {
       let midiaEnviadaNaLista = false;
