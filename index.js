@@ -1183,6 +1183,18 @@ function extrairPrecoFallbackUltimoNumero(texto) {
     if (valor === null) continue;
     if (valor < 500) continue;
 
+    // 🔒 BLOQUEIO: iPhone 12+ com preço menor que 1000
+const modeloDetectado = extrairModeloIphoneDefinitivo(texto);
+
+if (modeloDetectado) {
+  const numeroModelo = parseInt(modeloDetectado.match(/\d+/)?.[0]);
+
+  if (!isNaN(numeroModelo) && numeroModelo >= 12 && valor < 1000) {
+    console.log("⛔ Ignorado: preço muito baixo para iPhone", modeloDetectado, "|", valor);
+    return null;
+  }
+}
+
     // ✅ se não tem símbolo de moeda, exige que a linha tenha contexto de item
     const linhaTemContextoItem =
       /\b(iphone|ipad|macbook|watch|jbl)\b/i.test(linha) ||
