@@ -1958,7 +1958,7 @@ if (/(semi\W*nov[oa]|seminov[oa]|usado|vitrine|revisado)/i.test(t)) return "Semi
 if (/estado de novo/i.test(t)) return "Seminovo";
 
 // ✅ 2) depois sim "NOVO" + lacrado/selado/zerado
-const reNovo = /\b(novo+|nova+|lacrad[oa]o*|selad[oa]|zerad[oa]|zero+|lacrad(?:inho|inha|xinha)?)\b/i;
+const reNovo = /\b(novo|nova|lacrad[oa]o?|selad[oa]|zerad[oa]|zero|lacrad(?:inho|inha|xinha)?)\b/i;
 if (reNovo.test(t)) return "Novo";
 
   // ✅ bateria/percentual só força "Seminovo" se for iPhone
@@ -1975,17 +1975,9 @@ if (reNovo.test(t)) return "Novo";
     return "Novo";
   }
 
-  if (/\b(com\s*caixa|c\/\s*cx|c\/\s*caixa)\b/i.test(t) || /\bcx\b/i.test(t) && /\b(iphone|ipad|samsung|xiaomi|motorola|airpods)\b/i.test(t)) {
-    return "Seminovo";
-  }
-
   const prod = (produto || "").toLowerCase();
-  if (["airpods", "jbl", "acessório", "console"].includes(prod)) {
+  if (["airpods", "jbl", "acessório"].includes(prod)) {
     if (/\b(original|nf|nota\s*fiscal|garantia|apple)\b/i.test(t)) return "Novo";
-  }
-
-  if (prod === "jbl") {
-    if (/\b(partybox|boombox|encore|flip|charge|pulse|go|xtreme)\b/i.test(t) && !/\b(usado|seminovo|vitrine)\b/i.test(t)) return "Novo";
   }
 
   return "Não informado";
@@ -2030,8 +2022,7 @@ function detectarProduto(texto) {
 
   if (/\b(tv|smart tv)\b/i.test(t)) return "TV";
   if (/\b(ar\s*condicionado|split|inverter|convencional)\b/i.test(t)) return "Ar Condicionado";
-  if (/\b(ps[45]|playstation|xbox|nintendo|switch)\b/i.test(t)) return "Console";
-  if (/\b(hoverboard|taramps|controle)\b/i.test(t)) return "Diversos";
+  if (/\b(ps4|ps5|playstation|xbox|nintendo|switch|hoverboard|taramps|controle)\b/i.test(t)) return "Diversos";
   if (/\b(air\s*fryer|fritadeira|liquidificador|aspirador|microondas|geladeira|fogao|lavadora|maquina\s*de\s*lavar)\b/i.test(t)) return "Eletrodoméstico";
   if (/\b(drone|dji|gopro)\b/i.test(t)) return "Câmera/Drone";
   if (/\b(bicicleta|bike|patinete|scooter)\b/i.test(t)) return "Mobilidade";
@@ -2346,26 +2337,6 @@ const series = m ? `S${m[1]}` : "";
     return limpo || "Diversos (modelo não informado)";
   }
 
-  if (produto === "Console") {
-    if (/\bps\s*5\b/i.test(t)) return "PlayStation 5";
-    if (/\bps\s*4\b/i.test(t)) return "PlayStation 4";
-    if (/\bplaystation\s*5\b/i.test(t)) return "PlayStation 5";
-    if (/\bplaystation\s*4\b/i.test(t)) return "PlayStation 4";
-    if (/\bxbox\s*(series\s*[xs]|one|360)\b/i.test(t)) {
-      const m = t.match(/\bxbox\s*(series\s*[xs]|one|360)\b/i);
-      return `Xbox ${m[1]}`;
-    }
-    if (/\bxbox\b/i.test(t)) return "Xbox";
-    if (/\bnintendo\s*switch\b/i.test(t) || /\bswitch\b/i.test(t)) {
-      if (/\b(oled|v2|lite)\b/i.test(t)) {
-        const m = t.match(/\b(oled|v2|lite)\b/i);
-        return `Nintendo Switch ${m[1].toUpperCase()}`;
-      }
-      return "Nintendo Switch";
-    }
-    return "Console (não identificado)";
-  }
-
   if (produto === "Perfume") {
     const tx2 = (t || "").toLowerCase();
     const marcas = [
@@ -2544,7 +2515,7 @@ function extrairItensDeLista(texto) {
   if (extrairPreco(raw)) return false;
   if (ehTituloDeSecaoGenerica(raw)) return false;
 
-  const marcas = /^(garmin|amazfit|huawei|samsung|xiaomi|motorola|realme|poco|redmi|nintendo|console|jogos|games)$/i;
+  const marcas = /^(garmin|amazfit|huawei|samsung|xiaomi|motorola|realme|poco|redmi)$/i;
 
   if (marcas.test(x) && x.length <= 30) return true;
 
@@ -2660,9 +2631,6 @@ function extrairItensDeLista(texto) {
     "cameras",
     "drones",
     "veiculos",
-    "consoles",
-    "games",
-    "jogos",
   ].includes(t);
 }
 
@@ -2698,7 +2666,6 @@ function extrairItensDeLista(texto) {
   else if (titulo === "eletrodomesticos") contextoProduto = "Eletrodoméstico";
   else if (titulo === "cameras" || titulo === "drones") contextoProduto = "Câmera/Drone";
   else if (titulo === "veiculos") contextoProduto = "Veículo";
-  else if (titulo === "consoles" || titulo === "games" || titulo === "jogos") contextoProduto = "Console";
   else contextoProduto = null;
 
   continue;
@@ -2832,7 +2799,7 @@ if (/^\s*(lacrados?|novo(s)?|zero|selado(s)?)\s*$/i.test(low)) {
 
   if (precoLinha) {
     const pareceNovoItem =
-      /\b(iphone|ipad|macbook|airpods|watch|apple watch|garmin|jbl|samsung|xiaomi|motorola|realme|poco|ps4|ps5|playstation|xbox|nintendo|switch|console|notebook|tv\b|air\s*fr[yi]|geladeira|fogao|micro.ondas)\b/i.test(linha) ||
+      /\b(iphone|ipad|macbook|airpods|watch|apple watch|garmin|jbl|samsung|xiaomi|motorola|realme|poco|ps4|ps5|playstation|xbox)\b/i.test(linha) ||
       /\b(ultra|series|se)\b/i.test(linha) ||
       /\bs\d{1,2}\b/i.test(linha) ||
       /\b(3[8-9]|4[0-9])\s*m(?:\s*m)?\b/i.test(linha) ||
@@ -2880,13 +2847,6 @@ if (precoPareceArmazenamento(bloco, preco)) continue;
 }
 
     let produto = detectado && detectado !== "Outro" ? detectado : contextoProduto || "Outro";
-
-    if (contextoProduto && detectado && detectado !== "Outro" && detectado !== contextoProduto) {
-      const produtosIndependentes = ["Console", "TV", "Ar Condicionado", "Eletrodoméstico", "JBL", "Notebook", "Perfume", "Bebida", "Veículo", "Câmera/Drone", "Mobilidade"];
-      if (produtosIndependentes.includes(detectado)) {
-        produto = detectado;
-      }
-    }
 
     // Se estamos dentro de uma lista de TELAS, força produto = "Tela"
     if (contextoProduto === "Tela") {
