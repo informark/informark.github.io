@@ -827,7 +827,7 @@ const LIMITES_NOVO_MAX_AVISTA = {
 
   "16 Pro Max": { "256GB": 7199.99, "512GB": 8599.99 },
 
-  "17 Pro Max": { "256GB": 8700.00 },
+  "17 Pro Max": { "256GB": 8900.00 },
 };
 
 const REGRA_SEMINOVO = { addMax: 0, minDiff: 500 };
