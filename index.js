@@ -1223,7 +1223,7 @@ function extrairPrecoSeguro(itemTexto, blocoCompleto = "") {
 function extrairPrecoFallbackUltimoNumero(texto) {
   if (!texto) return null;
   if (ehMensagemDeBuscaSemPreco(texto)) return null;
-  
+
 
   // ✅ sem contexto de produto e sem contexto de preço = não pega
   const contextoProduto = temContextoDeProduto(texto);
@@ -1240,7 +1240,7 @@ function extrairPrecoFallbackUltimoNumero(texto) {
   for (let i = linhas.length - 1; i >= 0; i--) {
     const linha = linhas[i];
 
-    
+
 
     // ignora linha de bateria/saúde
     if (/🔋|bateria|saude|saúde|%\b/i.test(linha)) continue;
@@ -1258,6 +1258,8 @@ function extrairPrecoFallbackUltimoNumero(texto) {
 
     // ignora ano
     if (/^\s*(19|20)\d{2}\s*$/.test(linha)) continue;
+
+    if (/\b(fr|forerunner)\s*\d{2,4}\b/i.test(linha) && /\b(garmin)\b/i.test(texto)) continue;
 
     const matches = [...linha.matchAll(/\b(\d{3,5}(?:[.,]\d{2})?|\d{1,3}(?:\.\d{3})+(?:,\d{2})?)\b/g)];
     if (!matches.length) continue;
@@ -1341,7 +1343,7 @@ function inferirIphoneSemPalavra(bloco) {
   x.match(/\b(1[0-9])\s*(pro\s*max|pro|max|plus|mini|air)?(?:\s*de)?\s*(64|128|256|512)\s*(gb)?\b/i) ||
   x.match(/\bip\s*(1[0-9])\s*(pro\s*max|pro|max|plus|mini|air)?(?:\s*de)?\s*(64|128|256|512)\s*(gb)?\b/i);
 
-  
+
   if (!m) return null;
 
   const modeloNum = m[1];
@@ -1508,7 +1510,7 @@ function extrairPreco(texto) {
     if (!contextoProduto && !contextoPreco) continue;
 
     valores.push(valor);
-    
+
   }
 
   if (!valores.length) return null;
@@ -1825,7 +1827,13 @@ function detectarArmazenamento(texto) {
 
   if (/\b1\s*tb\b/.test(limpo) || /\b1024\s*gb\b/.test(limpo)) return "1TB";
 
-  let m = limpo.match(/\b(64|128|256|512)\s*gb\b/i);
+  let m = limpo.match(/\b(64|128|256|512)\s*\/\s*\d{1,2}\s*g(?:b)?\b/i);
+  if (m) return `${m[1]}GB`;
+
+  m = limpo.match(/\b(64|128|256|512)\s*\/\s*\d{1,2}\b/i);
+  if (m && !/gb\b/i.test(limpo)) return `${m[1]}GB`;
+
+  m = limpo.match(/\b(64|128|256|512)\s*gb\b/i);
   if (m) return `${m[1]}GB`;
 
   m = limpo.match(/\b(64|128|256|512)\s*g\b/i);
@@ -2037,8 +2045,8 @@ function detectarProduto(texto) {
   if (/\b(notebook|laptop)\b/i.test(t)) return "Notebook";
   if (/\b(dell|acer|asus|hp)\s*(inspiron|aspire|vivobook|pavilion|latitude|ideapad)\b/i.test(t)) return "Notebook";
 
-  // aceita 40m, 40mm, 49m, 49mm
-  if (/\b(3[8-9]|4[0-9])\s*m(?:\s*m)?\b/i.test(t)) return "Apple Watch";
+  // aceita 40m, 40mm, 49m, 49mm (mas não quando é Garmin FR com mm)
+  if (/\b(3[8-9]|4[0-9])\s*m(?:\s*m)?\b/i.test(t) && !/\b(garmin|forerunner|fr\s*\d)\b/i.test(t)) return "Apple Watch";
 
   if (/\b(tv|smart tv)\b/i.test(t)) return "TV";
   if (/\b(ar\s*condicionado|split|inverter|convencional)\b/i.test(t)) return "Ar Condicionado";
@@ -2052,11 +2060,14 @@ function detectarProduto(texto) {
   if (/(samsung|galaxy)/i.test(t)) return "Samsung";
   if (/\ba\d{2}\s*(5g|4g|lte)?\b/i.test(t) && /\b(64|128|256|512)\s*(gb)?\b/i.test(t) && !/\biphone\b/i.test(t)) return "Samsung";
 
-  if (/(xiaomi|redmi|mi\s?pad|poco)/i.test(t)) return "Xiaomi";
+  if (/(xiaomi|redmi|mi\s?pad|redmi\s*pad|poco)/i.test(t)) return "Xiaomi";
+  if (/\btablet\b/i.test(t) && /\bredmi\b/i.test(t)) return "Xiaomi";
   if (/(lenovo)/i.test(t)) return "Lenovo";
   if (/\b(motorola|moto\s*[gez]\d+|moto\s*edge)\b/i.test(t)) return "Motorola";
   if (/\bg\d{2}\b/i.test(t) && /\b(64|128|256)\s*(gb)?\b/i.test(t) && !/\b(galaxy|samsung|iphone|ipad)\b/i.test(t)) return "Motorola";
   if (/(realme)\b/i.test(t)) return "Realme";
+  if (/\binfinix\b/i.test(t)) return "Infinix";
+  if (/\btecno\b/i.test(t) || /\b(spark|camon|phantom|pova)\s*(go)?\s*\d/i.test(t)) return "Tecno";
 
   if (/\b(capa|capinha|case)\b/i.test(t) && /\bipad\b/i.test(t)) return "Acessório";
 
@@ -2102,7 +2113,7 @@ if (temAcessorio) return "Acessório";
     return "Garmin";
   }
 
- 
+
 
 
   return "Outro";
@@ -2305,16 +2316,20 @@ function extrairModelo(texto, produto) {
   if (produto === "Xiaomi") {
     const tx2 = (t || "").toLowerCase();
     let m;
-    m = tx2.match(/\bredmi\s*(note\s*)?\s*(\d{1,2})\s*(pro\s*\+?|c|s|a)?\b/i);
+    m = tx2.match(/\bredmi\s*(note\s*)?\s*(\d{1,2})\s*(pro\s*\+?|plus|c|s|a|x)?\b/i);
     if (m) {
       const note = m[1] ? "Note " : "";
       const suf = (m[3] || "").replace(/\+/, " Plus").trim();
       return `Redmi ${note}${m[2]}${suf ? " " + suf.charAt(0).toUpperCase() + suf.slice(1) : ""}`;
     }
-    m = tx2.match(/\bpoco\s*([a-z]\d{1,2})\s*(pro)?\b/i);
-    if (m) return `Poco ${m[1].toUpperCase()}${m[2] ? " Pro" : ""}`;
+    m = tx2.match(/\bredmi\s*(a)\s*(\d{1,2})\b/i);
+    if (m) return `Redmi A${m[2]}`;
+    m = tx2.match(/\bpoco\s*([a-z])\s*(\d{1,2})\s*(pro|plus)?\b/i);
+    if (m) return `Poco ${m[1].toUpperCase()}${m[2]}${m[3] ? " " + m[3].charAt(0).toUpperCase() + m[3].slice(1) : ""}`;
     m = tx2.match(/\bmi\s*(\d{1,2})\s*(lite|pro|ultra|t)?\b/i);
     if (m) return `Mi ${m[1]}${m[2] ? " " + m[2].charAt(0).toUpperCase() + m[2].slice(1) : ""}`;
+    m = tx2.match(/\bredmi\s*pad\s*(\d)?\b/i);
+    if (m) return `Redmi Pad${m[1] ? " " + m[1] : ""}`;
     m = tx2.match(/\bmi\s*pad\s*(\d)?\b/i);
     if (m) return `Mi Pad${m[1] ? " " + m[1] : ""}`;
     m = tx2.match(/\bamazfit\s*(bip|gtr|gts|t[\s-]?rex|band|active|cheetah|falcon|balance)\s*(\d+)?\s*(pro|mini|ultra|plus|s)?\b/i);
@@ -2323,6 +2338,11 @@ function extrairModelo(texto, produto) {
       return `Amazfit ${linha}${m[2] ? " " + m[2] : ""}${m[3] ? " " + m[3].charAt(0).toUpperCase() + m[3].slice(1) : ""}`;
     }
     if (/\bamazfit\b/i.test(tx2)) return "Amazfit";
+    m = tx2.match(/\bnote\s*(\d{1,2})\s*(pro\s*\+?|plus|s|ultra)?\b/i);
+    if (m) {
+      const suf = (m[2] || "").replace(/\+/, " Plus").trim();
+      return `Redmi Note ${m[1]}${suf ? " " + suf.charAt(0).toUpperCase() + suf.slice(1) : ""}`;
+    }
     return "Xiaomi (modelo não informado)";
   }
 
@@ -2336,6 +2356,39 @@ function extrairModelo(texto, produto) {
     m = tx2.match(/\bedge\s*(\d{2,3})?\s*(pro|plus|ultra|neo|fusion)?\b/i);
     if (m) return `Edge${m[1] ? " " + m[1] : ""}${m[2] ? " " + m[2].charAt(0).toUpperCase() + m[2].slice(1) : ""}`;
     return "Motorola (modelo não informado)";
+  }
+
+  if (produto === "Realme") {
+    const tx2 = (t || "").toLowerCase();
+    let m;
+    m = tx2.match(/\brealme\s*note\s*(\d{1,3})\s*(x|pro|plus|i|s)?\b/i);
+    if (m) {
+      const suf = (m[2] || "").trim();
+      return `Realme Note ${m[1]}${suf ? suf.toUpperCase() : ""}`;
+    }
+    m = tx2.match(/\brealme\s*(c)\s*(\d{1,3})\s*(x)?\s*(pro|plus|i|s|neo)?\b/i);
+    if (m) return `Realme ${m[1].toUpperCase()}${m[2]}${m[3] ? m[3].toUpperCase() : ""}${m[4] ? " " + m[4].charAt(0).toUpperCase() + m[4].slice(1) : ""}`;
+    m = tx2.match(/\brealme\s*(gt)\s*(neo\s*)?(\d{1,3})?\s*(pro|plus|x|i|s)?\b/i);
+    if (m) return `Realme GT${m[2] ? " Neo" : ""}${m[3] ? " " + m[3] : ""}${m[4] ? " " + m[4].charAt(0).toUpperCase() + m[4].slice(1) : ""}`.trim();
+    m = tx2.match(/\brealme\s*(\d{1,2})\s*(pro|plus|x|i)?\b/i);
+    if (m) return `Realme ${m[1]}${m[2] ? " " + m[2].charAt(0).toUpperCase() + m[2].slice(1) : ""}`;
+    return "Realme (modelo não informado)";
+  }
+
+  if (produto === "Infinix") {
+    const tx2 = (t || "").toLowerCase();
+    let m;
+    m = tx2.match(/\binfinix\s*(hot|smart|note|zero|gt)\s*(\d{1,3})\s*(i|pro|plus|x|s|nfc)?\b/i);
+    if (m) return `Infinix ${m[1].charAt(0).toUpperCase() + m[1].slice(1)} ${m[2]}${m[3] && m[3].toLowerCase() !== "nfc" ? m[3].toLowerCase() : ""}`.trim();
+    return "Infinix (modelo não informado)";
+  }
+
+  if (produto === "Tecno") {
+    const tx2 = (t || "").toLowerCase();
+    let m;
+    m = tx2.match(/\b(spark|camon|phantom|pova)\s*(go)?\s*(\d{1,2})?\s*(pro|plus|i|x)?\b/i);
+    if (m) return `${m[1].charAt(0).toUpperCase() + m[1].slice(1)}${m[2] ? " " + m[2].charAt(0).toUpperCase() + m[2].slice(1) : ""}${m[3] ? " " + m[3] : ""}${m[4] ? " " + m[4].charAt(0).toUpperCase() + m[4].slice(1) : ""}`.trim();
+    return "Tecno (modelo não informado)";
   }
 
   if (produto === "Garmin") {
@@ -2576,12 +2629,13 @@ function extrairItensDeLista(texto) {
   if (extrairPreco(raw)) return false;
   if (ehTituloDeSecaoGenerica(raw)) return false;
 
-  const marcas = /^(garmin|amazfit|huawei|samsung|xiaomi|motorola|realme|poco|redmi|nintendo|console|jogos|games)$/i;
+  const marcas = /^(garmin|amazfit|huawei|samsung|xiaomi|motorola|realme|poco|redmi|nintendo|console|jogos|games|infinix|tecno)$/i;
+  const marcasFlexivel = /^(garmin|amazfit|huawei|samsung|xiaomi|motorola|realme|poco|redmi|nintendo|console|jogos|games|infinix|tecno)\b/i;
 
   if (marcas.test(x) && x.length <= 30) return true;
 
-  if (/^\*{1,3}.+\*{1,3}$/.test(raw) && marcas.test(x)) return true;
-  if (/^[-–—]{1,6}\s*.+\s*[-–—]{1,6}$/.test(raw) && marcas.test(x)) return true;
+  if (/^\*{1,3}.+\*{1,3}$/.test(raw) && marcasFlexivel.test(x) && !/\b(64|128|256|512)\s*(gb|g\b|\/)/i.test(x)) return true;
+  if (/^[-–—]{1,6}\s*.+\s*[-–—]{1,6}$/.test(raw) && marcasFlexivel.test(x) && !/\b(64|128|256|512)\s*(gb|g\b|\/)/i.test(x)) return true;
 
   return false;
 }
@@ -2673,7 +2727,7 @@ function extrairItensDeLista(texto) {
 
   if (!t) return false;
 
-  return [
+  const titulosExatos = [
     "apple",
     "garmin",
     "samsung",
@@ -2702,7 +2756,17 @@ function extrairItensDeLista(texto) {
     "peca",
     "peças",
     "peça",
-  ].includes(t);
+    "infinix",
+    "tecno",
+  ];
+  if (titulosExatos.includes(t)) return true;
+  if (/\b(64|128|256|512)\s*(gb|g\b|\/)/i.test(t)) return false;
+  if (/\b\d{1,2}\s*(pro|max|plus|mini|air)\b/i.test(t)) return false;
+  const prefixos = ["apple", "garmin", "samsung", "realme", "xiaomi", "infinix", "tecno"];
+  for (const p of prefixos) {
+    if (t.startsWith(p + " ") && t.length <= 30) return true;
+  }
+  return false;
 }
 
   for (let i = 0; i < linhas.length; i++) {
@@ -2724,11 +2788,11 @@ function extrairItensDeLista(texto) {
   .replace(/\s+/g, " ")
   .trim();
 
-  if (titulo === "apple") contextoProduto = "Acessório";
-  else if (titulo === "garmin") contextoProduto = "Garmin";
-  else if (titulo === "samsung") contextoProduto = null;
-  else if (titulo === "realme") contextoProduto = null;
-  else if (titulo === "xiaomi") contextoProduto = null;
+  if (titulo === "apple" || titulo.startsWith("apple ")) contextoProduto = "Acessório";
+  else if (titulo === "garmin" || titulo.startsWith("garmin ")) contextoProduto = "Garmin";
+  else if (titulo === "samsung" || titulo.startsWith("samsung ")) contextoProduto = "Samsung";
+  else if (titulo === "realme" || titulo.startsWith("realme ")) contextoProduto = "Realme";
+  else if (titulo === "xiaomi" || titulo.startsWith("xiaomi ")) contextoProduto = "Xiaomi";
   else if (titulo === "diversos" || titulo === "diversos com nf") contextoProduto = "Diversos";
   else if (titulo === "tvs") contextoProduto = "TV";
   else if (titulo === "ar condicionado split" || titulo === "ar condicionado") contextoProduto = "Ar Condicionado";
@@ -2739,7 +2803,7 @@ function extrairItensDeLista(texto) {
   else if (titulo === "cameras" || titulo === "drones") contextoProduto = "Câmera/Drone";
   else if (titulo === "veiculos") contextoProduto = "Veículo";
   else if (titulo === "consoles" || titulo === "games" || titulo === "jogos") contextoProduto = "Console";
-  
+
   else if (
   titulo === "baterias" ||
   titulo === "bateria" ||
@@ -2748,7 +2812,10 @@ function extrairItensDeLista(texto) {
   titulo === "peças" ||
   titulo === "peça"
 ) contextoProduto = "Peça";
-  
+
+  else if (titulo === "infinix") contextoProduto = "Infinix";
+  else if (titulo === "tecno") contextoProduto = "Tecno";
+
   else contextoProduto = null;
 
   continue;
@@ -2932,9 +2999,14 @@ if (
   const temCorBuf = /\b(azul|blue|preto|black|branco|white|prata|silver|cinza|gray|grafite|graphite|gold|dourado|verde|green|roxo|purple|vermelho|red|rosa|pink|natural|desert|titanium|titanio|tit[aâ]nio|starlight|midnight|lilás|lilas)\b/i.test(bufferJunto);
   const temPrecoBuf = /(💰|r\$|\$)\s*[:\-]?\s*[\d.,]/i.test(bufferJunto);
   const semProduto = !/\b(iphone|ipad|macbook|airpods|watch|apple\s*watch|garmin|jbl|samsung|xiaomi|motorola|realme|poco|ps[45]|playstation|xbox|nintendo|switch|console|notebook|tv)\b/i.test(bufferJunto);
-  const semModeloNum = !/\b(1[0-7]|se)\s*(pro|max|plus|mini)?\s*(64|128|256|512)\s*g/i.test(bufferJunto);
+  const semModeloNum = !/\b(1[0-7]|se)\s*(pro|max|plus|mini|air)?\s*(64|128|256|512)\s*g/i.test(bufferJunto);
+  const temSufixoDiferente = ultimoItemBase && ultimoItemBase.modelo && /\b(pro\s*max|pro|max|plus|mini|air)\b/i.test(bufferJunto) && (() => {
+    const sufBuf = (bufferJunto.match(/\b(pro\s*max|pro|max|plus|mini|air)\b/i) || [""])[0].toLowerCase().replace(/\s+/g, "");
+    const sufBase = (ultimoItemBase.modelo.match(/\b(pro\s*max|pro|max|plus|mini|air)\b/i) || [""])[0].toLowerCase().replace(/\s+/g, "");
+    return sufBuf !== sufBase;
+  })();
 
-  if (temCorBuf && temPrecoBuf && semProduto && semModeloNum) {
+  if (temCorBuf && temPrecoBuf && semProduto && semModeloNum && !temSufixoDiferente) {
     const precoVar = extrairPrecoDaLinhaComMoeda(bufferJunto) || extrairPrecoLinhaVariacao(bufferJunto);
     if (precoVar) {
       const corVar = bufferJunto.match(/\b(azul|blue|preto|black|branco|white|prata|silver|cinza|gray|grafite|graphite|gold|dourado|verde|green|roxo|purple|vermelho|red|rosa|pink|natural|desert|titanium|titanio|tit[aâ]nio|starlight|midnight|lilás|lilas)\b/i);
@@ -2962,7 +3034,7 @@ if (contextoProduto === "Peça") {
   buffer = [];
   continue;
 }
-    
+
 
 if (!preco) continue;
 if (preco < 500 && /\b(iphone|11|12|13|14|15|16|17)\b/i.test(bloco)) continue;
@@ -2986,6 +3058,10 @@ if (precoPareceArmazenamento(bloco, preco)) continue;
       const produtosIndependentes = ["Console", "TV", "Ar Condicionado", "Eletrodoméstico", "JBL", "Notebook", "Perfume", "Bebida", "Veículo", "Câmera/Drone", "Mobilidade", "Conectividade"];
       if (produtosIndependentes.includes(detectado)) {
         produto = detectado;
+      }
+      const contextosMarcaForte = ["Xiaomi", "Realme", "Infinix", "Tecno", "Samsung"];
+      if (contextosMarcaForte.includes(contextoProduto) && detectado === "iPhone" && !/\biphone\b/i.test(bloco)) {
+        produto = contextoProduto;
       }
     }
 
@@ -3425,7 +3501,7 @@ if (pareceTelefonePuro && textoSoDigitos.length >= 10 && textoSoDigitos.length <
 }
 
     // LISTA: salva vários itens
-    
+
     let itensLista = extrairVariacoesMesmoItem(texto);
 
 if (!itensLista.length) {
@@ -3687,7 +3763,7 @@ if (produto === "iPad") {
   const m = (modeloLimpo || "").trim().toLowerCase();
   if (m === "ipad") modeloLimpo = "Não informado";
 }
- 
+
 
     if (produto === "iPhone" && (!armazenamento || armazenamento === "")) {
       const m1 = texto.match(/(?:^|\s)(64|128|256|512)\s*G\s*B(?:\s|$)/i);
@@ -3788,7 +3864,7 @@ if (produto === "JBL") {
           }
 
         // ✅ limites só para iPhone
-        
+
         if (produto === "iPhone") {
           if (!armazenamento && !ehListaDeTelas(texto)) {
             console.log("⛔ Ignorado: iPhone sem armazenamento");
