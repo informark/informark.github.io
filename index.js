@@ -1985,7 +1985,7 @@ if (reNovo.test(t)) return "Novo";
 
   if (extrairBateria(texto) !== null) return "Seminovo";
 
-  if (/\b(arranha[do]?|marquinha|marca\s*de\s*uso|detalhe|trincad[oa]|quebrad[oa]|amassad[oa]|mancha)\b/i.test(t)) return "Seminovo";
+  if (/\b(arranhad[oa]?|arranhao|marquinha|marca\s*de\s*uso|detalhe|trincad[oa]|quebrad[oa]|amassad[oa]|mancha)\b/i.test(t)) return "Seminovo";
   if (/\b(truetone\s*off|truetone\s*nao|mensagem\s*de\s*tela|face\s*id\s*nao|peca\s*trocada|tela\s*trocada)\b/i.test(t)) return "Seminovo";
   if (/\b(sem\s*caixa|sem\s*carregador|so\s*aparelho|apenas\s*aparelho)\b/i.test(t)) return "Seminovo";
   if (/\b(tem\s*caixa|com\s*caixa|c\/\s*cx|c\/\s*caixa)\b/i.test(t)) return "Seminovo";
@@ -1996,7 +1996,7 @@ if (reNovo.test(t)) return "Novo";
 
   if (["perfume", "bebida", "conectividade", "acessório", "acessorio"].includes(prod)) return "Novo";
 
-  return "Seminovo";
+  return "";
 }
 
 // mantido para compatibilidade: se alguém chamar direto, continua igual (sem produto)
