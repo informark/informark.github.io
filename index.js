@@ -1337,10 +1337,11 @@ function inferirIphoneSemPalavra(bloco) {
     .replace(/\bpromax\b/g, "pro max")
     .replace(/\b(\d{2})pm\b/g, "$1 pro max");
 
-  const m =
-    x.match(/\b(1[0-9])\s*(pro\s*max|pro|max|plus|mini|air)?\s*(64|128|256|512)\s*(gb)?\b/i) ||
-    x.match(/\bip\s*(1[0-9])\s*(pro\s*max|pro|max|plus|mini|air)?\s*(64|128|256|512)\s*(gb)?\b/i);
+    const m =
+  x.match(/\b(1[0-9])\s*(pro\s*max|pro|max|plus|mini|air)?(?:\s*de)?\s*(64|128|256|512)\s*(gb)?\b/i) ||
+  x.match(/\bip\s*(1[0-9])\s*(pro\s*max|pro|max|plus|mini|air)?(?:\s*de)?\s*(64|128|256|512)\s*(gb)?\b/i);
 
+  
   if (!m) return null;
 
   const modeloNum = m[1];
