@@ -3139,7 +3139,7 @@ function montarMensagemPromo({ produto, modelo, armazenamento, condicaoFinal, pr
     `\n💳 Cartão:\n` + `• 12x de R$ ${formatBRL(p12.parcela)}\n` + `• 18x de R$ ${formatBRL(p18.parcela)}\n`;
 
   const cond = (condicaoFinal || "").toString().trim().toLowerCase();
-  const linhaCondicao = cond === "nao informado" || cond === "não informado" ? "" : `📦 ${condicaoFinal}\n`;
+  const linhaCondicao = !cond || cond === "nao informado" || cond === "não informado" ? "" : `📦 ${condicaoFinal}\n`;
 
   const cores = extrairCoresDisponiveis(descricao);
   const linhaCores =
