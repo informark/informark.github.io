@@ -605,7 +605,7 @@ t = t.replace(/\bnova\b/gi, " "); // opcional: se quiser remover "nova" do resum
 
   t = t.replace(/\bcompra\s*m[ií]nima\s*\d*\s*pe[çc]as?\b/gi, " ");
 
-  t = t.replace(/\b(vendo|vendo|vendo|vendo|vendo|vendo|vendo|vendo)\b/gi, " ");
+  t = t.replace(/\bvendo\b/gi, " ");
 
   t = t.replace(
     /\b(pix|sem mais desconto|sem desconto|desconto|negocio|negociavel|negociável|pra vim buscar|para vir buscar|retirar no local|buscar|entrega)\b/gi,
@@ -1056,8 +1056,338 @@ function salvarLinhaCSV({ produto, modelo, armazenamento, cor, condicao, preco, 
   fs.appendFileSync(ARQUIVO_CSV, linhaCSV);
 }
 
+function sanitizarModeloParaSalvar(produto, modelo) {
+  const p = (produto || "").toString().trim();
+  const m = (modelo || "").toString().trim();
+
+  if (!m) return "Não informado";
+
+  if (p === "Acessório" && modeloAcessorioEhGenericoOuLixo(m)) {
+    return "Não informado";
+  }
+
+  return m;
+}
+
 function ehVCard(texto) {
   return /BEGIN:VCARD/i.test(texto) || /END:VCARD/i.test(texto) || /X-WA-LID:/i.test(texto) || /TEL;waid=/i.test(texto);
+}
+
+function normalizarNumeroPreco(bruto) {
+  if (!bruto) return null;
+
+  let s = bruto.toString().trim();
+
+  // remove moeda e espaços
+  s = s.replace(/[Rr]\$\s?/g, "").replace(/\$/g, "").replace(/\s+/g, "");
+
+  // caso BR: 5.150,00
+  if (s.includes(",") && s.includes(".")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  }
+  // caso BR sem milhar: 2350,00
+  else if (s.includes(",")) {
+    s = s.replace(",", ".");
+  }
+  // caso 5.150
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, "");
+  }
+
+  s = s.replace(/[^0-9.]/g, "");
+
+  const n = parseFloat(s);
+  if (isNaN(n)) return null;
+
+  if (n < 50 || n > 50000) return null;
+
+  return n;
+}
+
+function extrairPrecoLinhaVariacao(linha) {
+  if (!linha) return null;
+
+  const matches = [...linha.matchAll(/\b(\d{1,3}(?:\.\d{3})+(?:,\d{2})?|\d{3,5}(?:[.,]\d{2})?)\b/g)];
+  if (!matches.length) return null;
+
+  const ultimo = matches[matches.length - 1][1];
+  const valor = normalizarNumeroPreco(ultimo);
+
+  if (valor === null) return null;
+  if (valor < 500 || valor > 50000) return null;
+
+  return valor;
+}
+
+function extrairPrecoDaLinhaComMoeda(texto) {
+  if (!texto) return null;
+
+  const linhas = texto
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  // prioridade total para linhas com 💰, R$, $
+  for (let i = linhas.length - 1; i >= 0; i--) {
+  const linha = linhas[i];
+    if (!/(💰|r\$|\$)/i.test(linha)) continue;
+
+    const m = linha.match(/(?:💰|r\$|\$)\s*[:\-]?\s*([\d.,]{2,20})/i);
+    if (m) {
+      const valor = normalizarNumeroPreco(m[1]);
+      if (valor !== null) {
+        return valor;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extrairPrecoSeguro(itemTexto, blocoCompleto = "") {
+  if (!itemTexto) return null;
+
+  const textoPrincipal = itemTexto.toString().trim();
+  const bloco = (blocoCompleto || "").toString();
+
+  // 1) tenta preço na própria linha
+  const precoLinha = extrairPrecoDaLinhaComMoeda(textoPrincipal);
+  if (precoLinha !== null) {
+    return precoLinha;
+  }
+
+  // 2) tenta "de X por Y" na própria linha
+  const t = textoPrincipal.replace(/@\d{8,}/g, " ");
+  const tt = t.replace(/(\d),(?=\d{3}\b)/g, "$1.");
+  const ttt = tt.replace(/(\d{1,5}(?:\.\d{3})*),(?!\d)/g, "$1,00");
+
+  const reDePor =
+    /de\s*(?:r\$|\$)?\s*(\d{1,3}(?:\.\d{3})+|\d{3,5})(?:,(\d{2}))?\s*por\s*(?:r\$|\$)?\s*(\d{1,3}(?:\.\d{3})+|\d{3,5})(?:,(\d{2}))?/i;
+
+  const mp = ttt.match(reDePor);
+  if (mp) {
+    const a = parseFloat(mp[1].replace(/\./g, "") + "." + (mp[2] || "00"));
+    const b = parseFloat(mp[3].replace(/\./g, "") + "." + (mp[4] || "00"));
+
+    if (!isNaN(b) && b >= 200 && b <= 50000) return b;
+    if (!isNaN(a) && a >= 200 && a <= 50000) return a;
+  }
+
+  // 3) fallback só na linha
+  const fallbackLinha = extrairPrecoFallbackUltimoNumero(textoPrincipal);
+  if (fallbackLinha !== null) {
+    // bloqueio de BTU / capacidade
+    if (
+      /\b(inverter|convencional|split|btu|9k|12k|18k|24000|22000|18000|12000|9000)\b/i.test(textoPrincipal) &&
+      fallbackLinha >= 7000 &&
+      fallbackLinha <= 36000
+    ) {
+      return null;
+    }
+
+    // bloqueio de polegadas de TV
+    if (
+      /\b(tv|smart tv)\b/i.test(textoPrincipal) &&
+      /["”]/.test(textoPrincipal) &&
+      fallbackLinha >= 24 &&
+      fallbackLinha <= 100
+    ) {
+      return null;
+    }
+
+    return fallbackLinha;
+  }
+
+  // 4) último recurso: bloco inteiro
+  if (bloco && bloco !== textoPrincipal) {
+    const fallbackBloco = extrairPrecoFallbackUltimoNumero(bloco);
+    if (fallbackBloco !== null) return fallbackBloco;
+  }
+
+  return null;
+}
+
+function extrairPrecoFallbackUltimoNumero(texto) {
+  if (!texto) return null;
+  if (ehMensagemDeBuscaSemPreco(texto)) return null;
+  
+
+  // ✅ sem contexto de produto e sem contexto de preço = não pega
+  const contextoProduto = temContextoDeProduto(texto);
+  const contextoPreco = temContextoForteDePreco(texto);
+
+  // regra principal: só aceita fallback se houver contexto de produto
+  if (!contextoProduto && !contextoPreco) return null;
+
+  const linhas = texto
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (let i = linhas.length - 1; i >= 0; i--) {
+    const linha = linhas[i];
+
+    
+
+    // ignora linha de bateria/saúde
+    if (/🔋|bateria|saude|saúde|%\b/i.test(linha)) continue;
+
+    // ignora telefone
+    const soDigitos = linha.replace(/\D/g, "");
+    const pareceTelefone = /^\+?\s*\d[\d\s().\-–—]{6,}\d\s*$/.test(linha);
+    if (pareceTelefone && soDigitos.length >= 10 && soDigitos.length <= 13) continue;
+
+    // ignora validade / garantia em formato MM/AAAA ou MM/AA
+    if (/\b\d{1,2}\/(19|20)\d{2}\b/.test(linha) || /\b\d{1,2}\/\d{2}\b/.test(linha)) continue;
+
+    // ignora linha de garantia/validade
+    if (/\bgarantia\b|\bvalidade\b/i.test(linha)) continue;
+
+    // ignora ano
+    if (/^\s*(19|20)\d{2}\s*$/.test(linha)) continue;
+
+    const matches = [...linha.matchAll(/\b(\d{3,5}(?:[.,]\d{2})?|\d{1,3}(?:\.\d{3})+(?:,\d{2})?)\b/g)];
+    if (!matches.length) continue;
+
+    const ultimo = matches[matches.length - 1][1];
+    const valor = normalizarNumeroPreco(ultimo);
+
+    if (valor === null) continue;
+    if (valor < 500) continue;
+
+    // 🔒 BLOQUEIO: iPhone 12+ com preço menor que 1000
+const modeloDetectado = extrairModeloIphoneDefinitivo(texto);
+
+if (modeloDetectado) {
+  const numeroModelo = parseInt(modeloDetectado.match(/\d+/)?.[0]);
+
+  if (!isNaN(numeroModelo) && numeroModelo >= 12 && valor < 1000) {
+    console.log("⛔ Ignorado: preço muito baixo para iPhone", modeloDetectado, "|", valor);
+    return null;
+  }
+}
+
+    // ✅ se não tem símbolo de moeda, exige que a linha tenha contexto de item
+    const linhaTemContextoItem =
+  /\b(iphone|ipad|macbook|watch|jbl)\b/i.test(linha) ||
+  !!extrairModeloIphoneDefinitivo(linha) ||
+  /\b(64|128|256|512)\s*gb\b/i.test(linha) ||
+  /\b(pro\s*max|pro|max|plus|mini|xr|xs|16e)\b/i.test(linha) ||
+  /\b(tv|smart tv|tvs)\b/i.test(linha) ||
+  /\b(ar\s*condicionado|split|inverter|convencional|9k|12k|18k)\b/i.test(linha) ||
+  /\b(ps4|ps5|playstation|xbox|nintendo|switch|hoverboard|taramps|controle)\b/i.test(linha);
+
+    // aceita:
+    // - linha com contexto de item
+    // - ou mensagem geral com contexto de preço forte
+    if (!linhaTemContextoItem && !contextoPreco) continue;
+
+    return valor;
+  }
+
+  return null;
+}
+
+function temContextoForteDePreco(texto) {
+  if (!texto) return false;
+
+  const t = texto.toString().toLowerCase();
+
+  // moeda ou palavras de preço
+  if (/[💰$]|r\$/i.test(t)) return true;
+  if (/\b(preco|preço|valor|pix|avista|à vista|a vista|por)\b/i.test(t)) return true;
+  if (/\bde\b.*\bpor\b/i.test(t)) return true;
+
+  return false;
+}
+
+function limparTextoBase(s) {
+  return (s || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s\$\.,\-\(\)\*]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferirIphoneSemPalavra(bloco) {
+  const x = limparTextoBase(bloco)
+    .replace(/\b(\d{2})promax\b/g, "$1 pro max")
+    .replace(/\b(\d{2})pro\b/g, "$1 pro")
+    .replace(/\b(\d{2})plus\b/g, "$1 plus")
+    .replace(/\b(\d{2})mini\b/g, "$1 mini")
+    .replace(/\bpromax\b/g, "pro max")
+    .replace(/\b(\d{2})pm\b/g, "$1 pro max");
+
+  const m =
+    x.match(/\b(1[0-9])\s*(pro\s*max|pro|max|plus|mini)?\s*(64|128|256|512)\s*(gb)?\b/i) ||
+    x.match(/\bip\s*(1[0-9])\s*(pro\s*max|pro|max|plus|mini)?\s*(64|128|256|512)\s*(gb)?\b/i);
+
+  if (!m) return null;
+
+  const modeloNum = m[1];
+  const sufRaw = (m[2] || "").trim().replace(/\s+/g, " ").toLowerCase();
+  const arm = m[3] + "GB";
+
+  let suf = "";
+  if (sufRaw === "pro max") suf = "Pro Max";
+  else if (sufRaw === "pro") suf = "Pro";
+  else if (sufRaw === "plus") suf = "Plus";
+  else if (sufRaw === "max") suf = "Max";
+  else if (sufRaw === "mini") suf = "Mini";
+
+  return {
+    produto: "iPhone",
+    modelo: [modeloNum, suf].filter(Boolean).join(" "),
+    armazenamento: arm
+  };
+}
+
+function temContextoDeProduto(texto) {
+  if (!texto) return false;
+
+  const t = texto.toString();
+
+  const produto = detectarProduto(t);
+  const modeloIphone = extrairModeloIphoneDefinitivo(t);
+  const armazenamento = detectarArmazenamento(t);
+  const iphoneInferido = inferirIphoneSemPalavra(t);
+
+  if (produto && produto !== "Outro") return true;
+  if (modeloIphone) return true;
+  if (iphoneInferido) return true;
+
+  if (armazenamento && /\b(iphone|ipad|macbook|watch|jbl)\b/i.test(t)) return true;
+
+  // ✅ novos contextos
+  if (/\b(tv|smart tv|tvs)\b/i.test(t)) return true;
+  if (/\b(ar\s*condicionado|split|inverter|convencional)\b/i.test(t)) return true;
+  if (/\b(ps4|ps5|playstation|xbox|nintendo|switch)\b/i.test(t)) return true;
+  if (/\b(taramps|hoverboard|controle)\b/i.test(t)) return true;
+
+  return false;
+}
+
+
+function ehMensagemDeBuscaSemPreco(texto) {
+  if (!texto) return false;
+
+  const t = texto
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  const temBusca = /\b(procuro|procurando|busco|compro|compramos|quero comprar|tenho interesse|interessa|preciso de|quem tem|alguem tem|alguém tem)\b/i.test(t);
+
+  const temPrecoExplicito =
+    /(💰|r\$|\$)/i.test(t) ||
+    /\b(preco|preço|valor|pix|avista|a vista|à vista|por)\b/i.test(t);
+
+  return temBusca && !temPrecoExplicito;
 }
 
 
@@ -1066,22 +1396,56 @@ function ehVCard(texto) {
 // =========================
 function extrairPreco(texto) {
   if (!texto) return null;
+  if (ehMensagemDeBuscaSemPreco(texto)) return null;
 
-  const t = texto.toString().replace(/@\d{8,}/g, " ");
+  const original = texto.toString();
+  const contextoProduto = temContextoDeProduto(original);
+  const contextoPreco = temContextoForteDePreco(original);
+
+  // =========================
+  // 1) PRIORIDADE MÁXIMA:
+  // preço em linha com 💰 / R$ / $
+  // =========================
+  const precoLinhaMoeda = extrairPrecoDaLinhaComMoeda(original);
+  if (precoLinhaMoeda !== null) {
+  console.log("💲 Preço capturado por linha com moeda:", precoLinhaMoeda);
+  return precoLinhaMoeda;
+}
+
+  // =========================
+  // 2) CASO "DE X POR Y"
+  // =========================
+  const t = original.replace(/@\d{8,}/g, " ");
   const tt = t.replace(/(\d),(?=\d{3}\b)/g, "$1.");
   const ttt = tt.replace(/(\d{1,5}(?:\.\d{3})*),(?!\d)/g, "$1,00");
 
   const reDePor =
     /de\s*(?:r\$|\$)?\s*(\d{1,3}(?:\.\d{3})+|\d{3,5})(?:,(\d{2}))?\s*por\s*(?:r\$|\$)?\s*(\d{1,3}(?:\.\d{3})+|\d{3,5})(?:,(\d{2}))?/i;
+
   const mp = ttt.match(reDePor);
 
   if (mp) {
     const a = parseFloat(mp[1].replace(/\./g, "") + "." + (mp[2] || "00"));
     const b = parseFloat(mp[3].replace(/\./g, "") + "." + (mp[4] || "00"));
+
     if (!isNaN(b) && b >= 200 && b <= 50000) return b;
     if (!isNaN(a) && a >= 200 && a <= 50000) return a;
   }
 
+  // =========================
+  // 3) FALLBACK PROFISSIONAL:
+  // pega último número confiável da mensagem
+  // =========================
+  const fallback = extrairPrecoFallbackUltimoNumero(original);
+  if (fallback !== null) {
+  console.log("💲 Preço capturado por fallback:", fallback);
+  return fallback;
+}
+
+  // =========================
+  // 4) ÚLTIMO RECURSO:
+  // scanner geral antigo, mas mais protegido
+  // =========================
   const re = /(?:r\$|\$)?\s*\b(\d{1,3}(?:\.\d{3})+|\d{3,5})(?:,(\d{2}))?\b/gi;
 
   const valores = [];
@@ -1096,60 +1460,56 @@ function extrairPreco(texto) {
     if (isNaN(valor) || valor < 50 || valor > 50000) continue;
 
     const rawMatch = m[0] || "";
+
+    const contextoAntes = ttt.slice(Math.max(0, m.index - 20), m.index).toLowerCase();
+    const contextoDepois = ttt.slice(m.index + rawMatch.length, Math.min(ttt.length, m.index + rawMatch.length + 20)).toLowerCase();
+    const contexto = `${contextoAntes} ${contextoDepois}`;
+
+    // evita bateria e porcentagem
+    if (/bateria|saude|saúde|🔋|%/.test(contexto)) continue;
+
     const hasCurrency =
-      /r\$|\$/.test(rawMatch) || /r\$|\$/.test(t.slice(Math.max(0, m.index - 5), m.index + rawMatch.length + 5));
+      /r\$|\$/.test(rawMatch) || /r\$|\$/.test(ttt.slice(Math.max(0, m.index - 5), m.index + rawMatch.length + 5));
+
     const hasDecimal = !!m[2];
     const hasThousands = inteiroRaw.includes(".");
-
-    const contextoNum = tt
-      .slice(Math.max(0, m.index - 10), Math.min(tt.length, m.index + rawMatch.length + 10))
-      .toLowerCase();
 
     const temContextoDePreco =
       hasCurrency ||
       hasDecimal ||
       hasThousands ||
-      /\b(r\$|pix|reais|por|preco|preço|valor|\$)\b/.test(contextoNum);
+      /\b(r\$|pix|reais|por|preco|preço|valor|\$|avista|à vista)\b/.test(contexto);
 
+    if (!temContextoDePreco && !contextoProduto) continue;
     if (!temContextoDePreco && valor < 1000) continue;
 
-    if (/\b(partybox|jbl|fr|s\d{1,2}|iphone|ipad|macbook)\b/i.test(contextoNum) && valor < 1000) {
-      continue;
-    }
-
     const isYear = Number.isInteger(valor) && valor >= 1900 && valor <= 2099;
+    if (isYear && !hasCurrency && !hasDecimal && !hasThousands) continue;
 
-    if (isYear && !hasCurrency && !hasDecimal && !hasThousands) {
-      const contextoAno = t
-        .slice(Math.max(0, m.index - 12), Math.min(t.length, m.index + rawMatch.length + 12))
-        .toLowerCase();
+    // sem contexto real, não aceita número solto
+    if (!contextoProduto && !contextoPreco) continue;
 
-      if (/\b(de|ano|modelo|m)\b/.test(contextoAno)) continue;
-      continue;
-    }
-
-    valores.push({ valor, idx: m.index });
+    valores.push(valor);
+    
   }
 
   if (!valores.length) return null;
 
-  const reParcela =
-    /\b(\d{1,2})\s*x\s*(?:de\s*)?(?:r\$|\$)?\s*(\d{1,3}(?:\.\d{3})+|\d{3,5})(?:,(\d{2}))?\b/gi;
+const precoFinal = Math.max(...valores);
 
-  const parcelas = new Set();
-  let pm;
-  while ((pm = reParcela.exec(tt)) !== null) {
-    const inteiro = pm[2].replace(/\./g, "");
-    const decimal = pm[3] || "00";
-    const v = parseFloat(`${inteiro}.${decimal}`);
-    if (!isNaN(v) && v >= 50 && v <= 50000) parcelas.add(v);
+// 🔒 BLOQUEIO: iPhone 12+ com preço menor que 1000
+const modelo = extrairModeloIphoneDefinitivo(original);
+
+if (modelo) {
+  const numeroModelo = parseInt(modelo.match(/\d+/)?.[0]);
+
+  if (!isNaN(numeroModelo) && numeroModelo >= 12 && precoFinal < 1000) {
+    console.log("⛔ Ignorado: preço muito baixo para iPhone", modelo, "|", precoFinal);
+    return null;
   }
+}
 
-  const temValorGrande = valores.some((x) => x.valor >= 1500);
-  const filtrados = temValorGrande ? valores.filter((x) => !(parcelas.has(x.valor) && x.valor < 1200)) : valores;
-  const final = filtrados.length ? filtrados : valores;
-
-  return final.reduce((max, x) => (x.valor > max ? x.valor : max), 0);
+return precoFinal;
 }
 
 function extrairCoresDisponiveis(texto) {
@@ -1227,6 +1587,43 @@ function extrairTipoAcessorio(texto) {
   if (/\b(carregamento\s*sem\s*fio|magsafe)\b/.test(t)) return "MagSafe";
 
   return "Acessório (tipo não informado)";
+}
+
+function modeloAcessorioEhGenericoOuLixo(texto) {
+  const t = (texto || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[*_~]/g, "")
+    .replace(/[🔌💰📦📲📱💻⌚🛍️✨🔥🚨]/g, " ")
+    .replace(/[()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!t) return true;
+
+  // só traços ou símbolos
+  if (/^[-—–_\s]+$/.test(t)) return true;
+
+  // texto muito grande = descrição, não modelo
+  if (t.length > 45) return true;
+
+  // frases genéricas
+  if (
+    /\b(importada|original|originais|premium|qualidade|garantia|meses? de garantia|unidade|unidades|caixa|atacado|varejo|disponivel|disponiveis|oferta|promo|promocao)\b/i.test(t)
+  ) {
+    return true;
+  }
+
+  // tipo genérico sem modelo
+  if (
+    /^(fonte|cabo|capinha|pelicula|película|carregador|adaptador|case|caixa|fone|suporte|magsafe)$/i.test(t)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function ehListaDeTelas(texto) {
@@ -1308,10 +1705,15 @@ function extrairModeloIphoneDefinitivo(texto) {
   if (/\b(watch|apple watch|s\d{1,2}|ultra|mm)\b/i.test(t0)) return null;
 
   const t = t0
-    .replace(/[*_~]/g, "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  .replace(/[*_~]/g, "")
+  .toLowerCase()
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\bmaxxx+\b/g, "max")
+  .replace(/\bpromaxxx+\b/g, "pro max")
+  .replace(/\bpromaxx+\b/g, "pro max")
+  .replace(/\s+/g, " ")
+  .trim();
 
   // "SE" só deve contar como modelo quando vier junto de iPhone (evita "se encontra", etc.)
   const temSE = /\biphone\s*se\b/.test(t) || /\bip\s*se\b/.test(t) || (/\bse\b/.test(t) && /\b(2020|2022|2|2a|2ª|3|3a|3ª)\b/.test(t) && /\b(iphone|ip)\b/.test(t));
@@ -1446,7 +1848,7 @@ function extrairConfigMacBook(texto) {
 
   const t0 = (texto || "").toString();
 
-  // normaliza
+  // normaliza texto
   const t = t0
     .toLowerCase()
     .normalize("NFD")
@@ -1459,82 +1861,70 @@ function extrairConfigMacBook(texto) {
   let ram = "";
   let ssd = "";
 
-  // ✅ 1) RAM explícita (com "ram")
-  let mRam = t.match(/\b(8|16|24|32|64)\s*gb\s*ram\b/i);
-  if (mRam) ram = `${mRam[1]}GB RAM`;
+  // detecta se existe contexto de MacBook
+  const temContextoMacBook = /\b(macbook|mba|mbp|m[1-9])\b/i.test(t);
 
-  // ✅ 2) SSD explícito (com "ssd")
-  let mSsd = t.match(/\b(128|256|512|1024|1)\s*(gb|tb)\s*ssd\b/i);
-  if (mSsd) {
-    const num = mSsd[1];
-    const unit = mSsd[2];
-    if (unit === "tb" || num === "1") ssd = "1TB SSD";
-    else ssd = `${num}GB SSD`;
+  // =========================
+  // 1) formato clássico
+  // 16GB RAM 256GB SSD
+  // =========================
+  let m = t.match(/\b(8|16|24|32|64)\s*gb\s*(ram)?\b.*\b(128|256|512|1024)\s*gb\s*(ssd)?\b/i);
+  if (m) {
+    ram = `${m[1]}GB RAM`;
+    ssd = m[3] === "1024" ? "1TB SSD" : `${m[3]}GB SSD`;
   }
 
-  // ✅ 3) Formato curto "16/256" ou "16 / 256" ou "16-256"
-  // (interpreta como RAM/SSD)
-  // aceita: 8/256, 16/512, 24/512, 32/1024 etc
+  // =========================
+  // 2) formato invertido
+  // 256GB SSD 16GB RAM
+  // =========================
   if (!ram || !ssd) {
-    const m = t.match(/\b(8|16|24|32|64)\s*([\/\-x×])\s*(128|256|512|1024|1)\b/i);
+    m = t.match(/\b(128|256|512|1024)\s*gb\s*(ssd)?\b.*\b(8|16|24|32|64)\s*gb\s*(ram)?\b/i);
+    if (m) {
+      if (!ssd) ssd = m[1] === "1024" ? "1TB SSD" : `${m[1]}GB SSD`;
+      if (!ram) ram = `${m[3]}GB RAM`;
+    }
+  }
+
+  // =========================
+  // 3) formato simples
+  // 16 256
+  // =========================
+  if ((!ram || !ssd) && temContextoMacBook) {
+    m = t.match(/\b(8|16|24|32|64)\b\s+(128|256|512|1024)\b/);
     if (m) {
       if (!ram) ram = `${m[1]}GB RAM`;
-      const s = m[3];
-      if (!ssd) ssd = (s === "1" || s === "1024") ? "1TB SSD" : `${s}GB SSD`;
+      if (!ssd) ssd = m[2] === "1024" ? "1TB SSD" : `${m[2]}GB SSD`;
     }
   }
 
-  // ✅ 4) Formato "16gb/256gb"
-  if (!ram || !ssd) {
-    const m = t.match(/\b(8|16|24|32|64)\s*gb\s*([\/\-x×])\s*(128|256|512|1024)\s*gb\b/i);
+  // =========================
+  // 4) formato com GB separado
+  // 16gb 256gb
+  // =========================
+  if ((!ram || !ssd) && temContextoMacBook) {
+    m = t.match(/\b(8|16|24|32|64)\s*gb\b.*\b(128|256|512|1024)\s*gb\b/i);
     if (m) {
       if (!ram) ram = `${m[1]}GB RAM`;
-      if (!ssd) ssd = (m[3] === "1024") ? "1TB SSD" : `${m[3]}GB SSD`;
+      if (!ssd) ssd = m[2] === "1024" ? "1TB SSD" : `${m[2]}GB SSD`;
     }
   }
 
-  // ✅ 5) Formato "16 256" (bem comum em lista) mas só se houver contexto MacBook
-  // evita confundir com preço, polegadas, etc.
-  if ((!ram || !ssd) && /\bmacbook\b|\bmba\b|\bmbp\b|\bm[1-9]\b/i.test(t)) {
-    const m = t.match(/\b(8|16|24|32|64)\b\s+(128|256|512|1024)\b/);
-    if (m) {
-      if (!ram) ram = `${m[1]}GB RAM`;
-      if (!ssd) ssd = (m[2] === "1024") ? "1TB SSD" : `${m[2]}GB SSD`;
-    }
-  }
-
-    // ✅ 6) Formato invertido "256/16" (SSD/RAM) — comum em anúncios
-  // Ex: "256/16", "512-16", "1/16" (1 = 1TB)
-  if (!ram || !ssd) {
-    const mInv = t.match(/\b(128|256|512|1024|1)\s*([\/\-x×])\s*(8|16|24|32|64)\b/i);
-    if (mInv) {
-      const s = mInv[1]; // SSD
-      const r = mInv[3]; // RAM
-      if (!ram) ram = `${r}GB RAM`;
-      if (!ssd) ssd = (s === "1" || s === "1024") ? "1TB SSD" : `${s}GB SSD`;
-    }
-  }
-
-  // ✅ 7) Formatos explícitos "16ram 256ssd" / "16gb ram 256gb ssd"
+  // =========================
+  // 5) formato misto
+  // 16 ram 256 ssd
+  // =========================
   if (!ram) {
-    const m = t.match(/\b(8|16|24|32|64)\s*(gb)?\s*ram\b/i);
-    if (m) ram = `${m[1]}GB RAM`;
+    m = t.match(/\b(8|16|24|32|64)\s*(gb)?\s*(ram)\b/i);
+    if (m) {
+      ram = `${m[1]}GB RAM`;
+    }
   }
 
   if (!ssd) {
-    const m = t.match(/\b(128|256|512|1024|1)\s*(gb|tb)?\s*ssd\b/i);
+    m = t.match(/\b(128|256|512|1024)\s*(gb)?\s*(ssd)\b/i);
     if (m) {
-      const s = m[1];
-      ssd = (s === "1" || (m[2] || "").toLowerCase() === "tb" || s === "1024") ? "1TB SSD" : `${s}GB SSD`;
-    }
-  }
-
-  // ✅ 8) Formato "16gb 256gb" (sem falar RAM/SSD) — só se tiver contexto de MacBook
-  if ((!ram || !ssd) && /\bmacbook\b|\bmba\b|\bmbp\b|\bm[1-9]\b/i.test(t)) {
-    const m = t.match(/\b(8|16|24|32|64)\s*gb\b.*\b(128|256|512|1024)\s*gb\b/i);
-    if (m) {
-      if (!ram) ram = `${m[1]}GB RAM`;
-      if (!ssd) ssd = (m[2] === "1024") ? "1TB SSD" : `${m[2]}GB SSD`;
+      ssd = m[1] === "1024" ? "1TB SSD" : `${m[1]}GB SSD`;
     }
   }
 
@@ -1600,6 +1990,11 @@ function detectarProduto(texto) {
   // aceita 40m, 40mm, 49m, 49mm
   if (/\b(3[8-9]|4[0-9])\s*m(?:\s*m)?\b/i.test(t)) return "Apple Watch";
 
+  if (/\b(tv|smart tv)\b/i.test(t)) return "TV";
+  if (/\b(ar\s*condicionado|split|inverter|convencional)\b/i.test(t)) return "Ar Condicionado";
+  if (/\b(ps4|ps5|playstation|xbox|nintendo|switch|hoverboard|taramps|controle)\b/i.test(t)) return "Diversos";
+
+
   if (/(samsung|galaxy)/i.test(t)) return "Samsung";
   if (/(xiaomi|redmi|mi\s?pad)/i.test(t)) return "Xiaomi";
   if (/(lenovo)/i.test(t)) return "Lenovo";
@@ -1630,8 +2025,11 @@ if (/\bs\d{1,2}\b/i.test(t) && /\b(64|128|256|512)\s*gb\b/i.test(t)) return "Sam
 // ✅ Apple Watch só se tiver contexto forte de Watch
 const temContextoWatch = /\b(apple\s*watch|watch|series|ultra|se|\bmm\b)\b/i.test(t);
 const temSerieS = /\bs\d{1,2}\b/i.test(t);
+const temTamanhoWatch = /\b(3[8-9]|4[0-9])\s*m(?:\s*m)?\b/i.test(t);
 
-if (temContextoWatch && (temSerieS || /\bultra\b/i.test(t))) return "Apple Watch";
+if ((temContextoWatch && (temSerieS || /\bultra\b/i.test(t))) || (temSerieS && temTamanhoWatch)) {
+  return "Apple Watch";
+}
 
   // ✅ JBL primeiro (pra "cabo" não derrubar pra acessório)
 if (/\bjbl\b/i.test(t) || /(partybox|boom?box|encore)/i.test(t)) return "JBL";
@@ -1644,6 +2042,9 @@ if (temAcessorio) return "Acessório";
   if (/\bgarmin\b/i.test(t) || /\bfr\d{2,3}\b/i.test(t) || /\bvivo\s*active\b/i.test(t)) {
     return "Garmin";
   }
+
+ 
+
 
   return "Outro";
 }
@@ -1799,14 +2200,26 @@ const series = m ? `S${m[1]}` : "";
   }
 
   if (produto === "Acessório") {
-    const semPreco = (t || "")
-      .replace(/(?:r\$|\$)\s*\d[\d.,]*/gi, "")
-      .replace(/\b\d{1,3}(?:\.\d{3})*(?:,\d{2})?\b/g, "")
-      .replace(/\s{2,}/g, " ")
-      .trim();
+  const tipo = extrairTipoAcessorio(t);
 
-    return semPreco || "Acessório (modelo não informado)";
+  let semPreco = (t || "")
+    .replace(/(?:r\$|\$)\s*\d[\d.,]*/gi, " ")
+    .replace(/\b\d{1,3}(?:\.\d{3})*(?:,\d{2})?\b/g, " ")
+    .replace(/[|]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  semPreco = semPreco
+    .replace(/^[-—–_\s🔌💰📦()]+/i, "")
+    .replace(new RegExp("^" + tipo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*", "i"), "")
+    .trim();
+
+  if (modeloAcessorioEhGenericoOuLixo(semPreco)) {
+    return "Não informado";
   }
+
+  return semPreco || "Não informado";
+}
 
   if (produto === "Garmin") {
     const tx2 = (t || "").toLowerCase();
@@ -1823,7 +2236,67 @@ const series = m ? `S${m[1]}` : "";
     return "Garmin (modelo não informado)";
   }
 
+    if (produto === "TV") {
+    const limpo = (texto || "").toString().replace(/[*_~]/g, "").trim();
+    return limpo || "TV (modelo não informado)";
+  }
+
+  if (produto === "Ar Condicionado") {
+    const limpo = (texto || "").toString().replace(/[*_~]/g, "").trim();
+    return limpo || "Ar Condicionado (modelo não informado)";
+  }
+
+  if (produto === "Diversos") {
+    const limpo = (texto || "").toString().replace(/[*_~]/g, "").trim();
+    return limpo || "Diversos (modelo não informado)";
+  }
+
   return "Não informado";
+}
+
+function extrairVariacoesMesmoItem(texto) {
+  if (!texto) return [];
+
+  const produto = detectarProduto(texto);
+  if (produto !== "iPhone") return [];
+
+  const modelo = extrairModelo(texto, produto);
+  if (!modelo || modelo === "Não informado") return [];
+
+  const condicao = detectarCondicaoPorProduto(texto, produto);
+
+  const itens = [];
+  const re = /\(\s*(256|512|1024|1\s*tb)\s*(gb|tb)?\s*\)\s*\*?\s*(?:r\$|\$)\s*([\d.]+,\d{2}|[\d.]+)\*?/gi;
+
+  let m;
+  while ((m = re.exec(texto)) !== null) {
+    let armRaw = (m[1] || "").toString().trim().toUpperCase();
+    let unidade = (m[2] || "").toString().trim().toUpperCase();
+    const precoRaw = (m[3] || "").toString().trim();
+
+    let armazenamento = "";
+    if (armRaw === "1024" || armRaw === "1 TB") {
+      armazenamento = "1TB";
+    } else if (unidade === "TB") {
+      armazenamento = `${armRaw}TB`;
+    } else {
+      armazenamento = `${armRaw}GB`;
+    }
+
+    const preco = normalizarNumeroPreco(precoRaw);
+    if (!preco) continue;
+
+    itens.push({
+      produto,
+      modelo,
+      armazenamento,
+      condicao,
+      preco,
+      descricaoItem: texto,
+    });
+  }
+
+  return itens;
 }
 
 /* =========================
@@ -1862,26 +2335,27 @@ function extrairItensDeLista(texto) {
   };
 
   function ehTituloSecaoNaoApple(linha) {
-    const raw = (linha || "").trim();
-    const x = limpar(raw);
+  const raw = (linha || "").trim();
+  const x = limpar(raw);
 
-    if (extrairPreco(raw)) return false;
+  if (extrairPreco(raw)) return false;
+  if (ehTituloDeSecaoGenerica(raw)) return false;
 
-    const marcas = /(garmin|amazfit|huawei|samsung|xiaomi|motorola|realme|poco|redmi)/i;
+  const marcas = /^(garmin|amazfit|huawei|samsung|xiaomi|motorola|realme|poco|redmi)$/i;
 
-    if (marcas.test(x) && x.length <= 30) return true;
+  if (marcas.test(x) && x.length <= 30) return true;
 
-    if (/^\*{1,3}.+\*{1,3}$/.test(raw) && marcas.test(raw)) return true;
-    if (/^[-–—]{1,6}\s*.+\s*[-–—]{1,6}$/.test(raw) && marcas.test(raw)) return true;
+  if (/^\*{1,3}.+\*{1,3}$/.test(raw) && marcas.test(x)) return true;
+  if (/^[-–—]{1,6}\s*.+\s*[-–—]{1,6}$/.test(raw) && marcas.test(x)) return true;
 
-    return false;
-  }
+  return false;
+}
 
   function ehLinhaVariacaoCorPreco(linha) {
     const raw = linha || "";
     const x = limpar(raw);
 
-    const p = extrairPreco(raw);
+    const p = extrairPrecoLinhaVariacao(raw);
     if (!p) return false;
 
     const temCor =
@@ -1951,40 +2425,85 @@ function extrairItensDeLista(texto) {
     return temGB && !temSinalPreco && preco <= 512;
   }
 
-  function inferirIphoneSemPalavra(bloco) {
-  const x = limpar(bloco)
-    .replace(/\bpromax\b/g, "pro max")
-    .replace(/\b17pm\b/g, "17 pro max")
-    .replace(/\b(\d{2})pm\b/g, "$1 pro max");
+  function ehTituloDeSecaoGenerica(linha) {
+  const t = (linha || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[*_~().]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  const m =
-    x.match(/\b(1[0-9])\s*(pro\s*max|pro|max|plus|mini)?\s*(64|128|256|512)\s*(gb)?\b/i) ||
-    x.match(/\bip\s*(1[0-9])\s*(pro\s*max|pro|max|plus|mini)?\s*(64|128|256|512)\s*(gb)?\b/i);
+  if (!t) return false;
 
-  if (!m) return null;
-
-  const modeloNum = m[1];
-  const sufRaw = (m[2] || "").trim().replace(/\s+/g, " ").toLowerCase();
-  const arm = m[3] + "GB";
-
-  let suf = "";
-  if (sufRaw === "pro max") suf = "Pro Max";
-  else if (sufRaw === "pro") suf = "Pro";
-  else if (sufRaw === "plus") suf = "Plus";
-  else if (sufRaw === "max") suf = "Max";
-  else if (sufRaw === "mini") suf = "Mini";
-
-  return { produto: "iPhone", modelo: [modeloNum, suf].filter(Boolean).join(" "), armazenamento: arm };
+  return [
+    "apple",
+    "garmin",
+    "samsung",
+    "realme",
+    "xiaomi",
+    "diversos",
+    "diversos com nf",
+    "tvs",
+    "ar condicionado split",
+    "ar condicionado"
+  ].includes(t);
 }
 
   for (let i = 0; i < linhas.length; i++) {
-    const linha = linhas[i];
+  const linha = linhas[i];
 
-    if (/^\*?\s*apple\s*\*?$/i.test(linha.trim())) {
-      contextoProduto = "Acessório";
-      buffer = [];
-      continue;
-    }
+  if (ehTituloDeSecaoGenerica(linha)) {
+  buffer = [];
+  ultimoItemBase = null;
+  ultimoWatchBase = null;
+  contextoCondicao = null;
+
+  const titulo = (linha || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[*_~().]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (titulo === "apple") contextoProduto = "Acessório";
+  else if (titulo === "garmin") contextoProduto = "Garmin";
+  else if (titulo === "samsung") contextoProduto = null;
+  else if (titulo === "realme") contextoProduto = null;
+  else if (titulo === "xiaomi") contextoProduto = null;
+  else if (titulo === "diversos" || titulo === "diversos com nf") contextoProduto = "Diversos";
+  else if (titulo === "tvs") contextoProduto = "TV";
+  else if (titulo === "ar condicionado split" || titulo === "ar condicionado") contextoProduto = "Ar Condicionado";
+  else contextoProduto = null;
+
+  continue;
+}
+
+  const linhaPareceOutroProduto =
+  /\b(ps4|ps5|playstation|xbox|nintendo|switch)\b/i.test(linha) ||
+  /\bapple watch\b/i.test(linha) ||
+  /\bwatch\b/i.test(linha) ||
+  /\bultra\b/i.test(linha) ||
+  /\bseries\s*\d{1,2}\b/i.test(linha) ||
+  /\bs\d{1,2}\b/i.test(linha) ||
+  /\b(3[8-9]|4[0-9])\s*m(?:\s*m)?\b/i.test(linha) ||
+  /\b(garmin|amazfit|huawei)\b/i.test(linha);
+
+  if (linhaPareceOutroProduto) {
+  ultimoItemBase = null;
+  ultimoWatchBase = null;
+  buffer = [];
+}
+
+  if (/^\*?\s*apple\s*\*?$/i.test(linha.trim())) {
+    contextoProduto = "Acessório";
+    buffer = [];
+    continue;
+  }
+
 
     if (ehRodape(linha)) continue;
 
@@ -2050,7 +2569,7 @@ if (/^\s*(lacrados?|novo(s)?|zero|selado(s)?)\s*$/i.test(low)) {
       ultimoItemBase.armazenamento !== "";
 
     if (baseIphoneCompleta && buffer.length === 0 && ehLinhaVariacaoCorPreco(linha)) {
-      const precoLinha = extrairPreco(linha);
+      const precoLinha = extrairPrecoLinhaVariacao(linha);
 
       itens.push({
         produto: ultimoItemBase.produto,
@@ -2072,7 +2591,7 @@ if (/^\s*(lacrados?|novo(s)?|zero|selado(s)?)\s*$/i.test(low)) {
       ultimoWatchBase && ultimoWatchBase.produto === "Apple Watch" && ultimoWatchBase.modelo && ultimoWatchBase.modelo !== "Apple Watch (modelo não informado)";
 
     if (baseWatchCompleta && buffer.length === 0 && /^\s*\(/.test(linha)) {
-      const precoLinha = extrairPreco(linha);
+      const precoLinha = extrairPrecoLinhaVariacao(linha);
       if (precoLinha) {
         itens.push({
           produto: ultimoWatchBase.produto,
@@ -2087,39 +2606,44 @@ if (/^\s*(lacrados?|novo(s)?|zero|selado(s)?)\s*$/i.test(low)) {
     }
 
     if (baseIphoneCompleta && buffer.length === 0) {
-      const precoLinha = extrairPreco(linha);
+  const precoLinha = extrairPrecoLinhaVariacao(linha);
 
-      if (precoLinha) {
-        const pareceNovoItem =
-          /\b(iphone|ipad|macbook|airpods|watch|garmin|jbl|samsung|xiaomi|motorola|realme|poco)\b/i.test(linha) ||
-          /\b(1[0-9])\b(?![.,]\d{3}\b)/i.test(linha);
+  if (precoLinha) {
+    const pareceNovoItem =
+      /\b(iphone|ipad|macbook|airpods|watch|apple watch|garmin|jbl|samsung|xiaomi|motorola|realme|poco|ps4|ps5|playstation|xbox)\b/i.test(linha) ||
+      /\b(ultra|series|se)\b/i.test(linha) ||
+      /\bs\d{1,2}\b/i.test(linha) ||
+      /\b(3[8-9]|4[0-9])\s*m(?:\s*m)?\b/i.test(linha) ||
+      /\b(1[0-9])\b(?![.,]\d{3}\b)/i.test(linha);
 
-        if (!pareceNovoItem) {
-          itens.push({
-            produto: ultimoItemBase.produto,
-            modelo: ultimoItemBase.modelo,
-            armazenamento: ultimoItemBase.armazenamento,
-            condicao: ultimoItemBase.condicao,
-            preco: precoLinha,
-            descricaoItem: `${linha}`,
-          });
-          continue;
-        }
-      }
+    if (!pareceNovoItem) {
+      itens.push({
+        produto: ultimoItemBase.produto,
+        modelo: ultimoItemBase.modelo,
+        armazenamento: ultimoItemBase.armazenamento,
+        condicao: ultimoItemBase.condicao,
+        preco: precoLinha,
+        descricaoItem: `${linha}`,
+      });
+      continue;
     }
+  }
+}
 
     // Se for seção de Acessório e a linha não tem preço, não carrega para o próximo item
 if ((contextoProduto === "Acessório") && !extrairPreco(linha)) {
   continue;
 }
 
-    buffer.push(linha);
+buffer.push(linha);
 
-    const bloco = buffer.join(" ");
-    const preco = extrairPreco(bloco);
+const bloco = buffer.join(" | ");
+const preco = extrairPrecoSeguro(linha, bloco);
+    
 
-    if (!preco) continue;
-    if (precoPareceArmazenamento(bloco, preco)) continue;
+if (!preco) continue;
+if (preco < 500 && /\b(iphone|11|12|13|14|15|16|17)\b/i.test(bloco)) continue;
+if (precoPareceArmazenamento(bloco, preco)) continue;
 
     let detectado = detectarProduto(bloco);
 
@@ -2179,13 +2703,17 @@ if (produto === "MacBook") {
 
     if (produto === "Apple Watch") armazenamento = "";
 
-    if (produto === "iPhone" && !armazenamento) {
-      const inf2 = inferirIphoneSemPalavra(bloco);
-      if (inf2) {
-        modelo = modelo && modelo !== "Não informado" ? modelo : inf2.modelo;
-        armazenamento = inf2.armazenamento;
-      }
+    if (produto === "iPhone" && (!armazenamento || !modelo || modelo === "Não informado")) {
+  const inf2 = inferirIphoneSemPalavra(bloco);
+  if (inf2) {
+    if (!modelo || modelo === "Não informado") {
+      modelo = inf2.modelo;
     }
+    if (!armazenamento) {
+      armazenamento = inf2.armazenamento;
+    }
+  }
+}
 
     if (!contextoProduto && produto === "Outro") {
       const inf = inferirIphoneSemPalavra(bloco);
@@ -2258,7 +2786,7 @@ if (produto === "MacBook") {
     buffer = [];
   }
 
-  return itens.length >= 2 ? itens : [];
+  return itens.length ? itens : [];
 }
 
 
@@ -2527,6 +3055,10 @@ client.on("message", async (msg) => {
     console.log("De:", nome);
     console.log("Número:", numero);
     console.log("Mensagem (bruta):", texto);
+    if (ehMensagemDeBuscaSemPreco(texto)) {
+  console.log("ℹ️ Ignorado: mensagem de procura/compra sem preço.");
+  return;
+}
 
     // =========================
 // ANTI-CONTATO (telefone puro) — não deixa virar "preço"
@@ -2552,7 +3084,11 @@ if (pareceTelefonePuro && textoSoDigitos.length >= 10 && textoSoDigitos.length <
 
     // LISTA: salva vários itens
     
-    const itensLista = extrairItensDeLista(texto);
+    let itensLista = extrairVariacoesMesmoItem(texto);
+
+if (!itensLista.length) {
+  itensLista = extrairItensDeLista(texto);
+}
 
     if (itensLista.length) {
       let midiaEnviadaNaLista = false;
@@ -2560,7 +3096,7 @@ if (pareceTelefonePuro && textoSoDigitos.length >= 10 && textoSoDigitos.length <
       for (const item of itensLista) {
         salvarLinhaCSV({
           produto: item.produto,
-          modelo: item.modelo,
+          modelo: sanitizarModeloParaSalvar(item.produto, item.modelo),
           armazenamento: item.armazenamento,
           cor: extrairCorDaDescricao(item.descricaoItem),
           condicao: item.condicao,
@@ -2753,8 +3289,8 @@ if (!preco) {
   return;
 }
 
-if (produto === "iPhone" && preco < 500 && !ehListaDeTelas(texto)) {
-  console.log("ℹ️ Ignorado: iPhone com preço muito baixo (provável ruído).");
+if (["iPhone", "iPad", "MacBook", "Apple Watch"].includes(produto) && preco < 500 && !ehListaDeTelas(texto)) {
+  console.log("ℹ️ Ignorado: preço muito baixo para esse produto (provável ruído).");
   return;
 }
 
@@ -2798,7 +3334,7 @@ if (produto === "iPhone" && pct !== null) {
 // ✅ Agora SIM: inferência por tabelas (1x só, com modeloLimpo pronto)
 condicao = aplicarInferenciaSeNaoInformado(condicao, {
   produto,
-  modelo: modeloLimpo,
+  modelo: sanitizarModeloParaSalvar(produto, modeloLimpo),
   armazenamento,
   preco,
   descricao: texto
@@ -2829,11 +3365,6 @@ if (produto === "iPad") {
       .filter(Boolean)
       .join(" | ");
 
-      if (produto === "iPhone" && temDefeitoBloqueante(descricao || "")) {
-  console.log("⛔ Promo BLOQUEADA por defeito (normal):", modeloLimpo, "|", descricao);
-  return;
-}
-
     salvarLinhaCSV({
       produto,
       modelo: modeloLimpo,
@@ -2852,6 +3383,11 @@ if (produto === "iPad") {
     agendarAtualizacaoRelatorio();
 
     console.log(`📝 Descrição salva: ${descricao}`);
+
+    if (produto === "iPhone" && temDefeitoBloqueante(descricao || "")) {
+      console.log("⛔ Promo BLOQUEADA por defeito (normal):", modeloLimpo, "|", descricao);
+      return;
+}
 
     // =========================
     // ENVIO AUTOMÁTICO PARA GRUPO PROMO (iPhone + iPad + MacBook + Apple Watch + JBL)
