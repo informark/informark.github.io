@@ -1783,7 +1783,7 @@ function extrairModeloIphoneDefinitivo(texto) {
   const temPlus = /\bplus\b/.test(t);
   const temMini = /\bmini\b/.test(t);
   const temMax = /\bmax\b/.test(t);
-  const temAir = /\bair\b/.test(t) && /\biphone\b/.test(t);
+  const temAir = /\bair\b/.test(t);
 
   let suf = "";
   if (temProMax) suf = "Pro Max";
@@ -2903,8 +2903,19 @@ if (!extrairPreco(linha) && !ehLinhaProduto && /\b(lacrados?|novo(s)?|zero|selad
   }
 }
 
+const linhaPareceProdutoApple =
+  /\b(iphone|ipad|macbook|airpods|watch|apple\s*watch)\b/i.test(linha) ||
+  /\b(xr|xs|se)\b/i.test(linha) ||
+  /\b(8|9|10|11|12|13|14|15|16|17)\s*(pro\s*max|promax|pro|max|plus|mini|air)?\s*(64|128|256|512)\s*g(?:b)?\b/i.test(linha) ||
+  /\b(8|9|10|11|12|13|14|15|16|17)\s*(pro\s*max|promax|pro|max|plus|mini|air)\b/i.test(linha) ||
+  /📱/.test(linha);
+
     // Se for seção de Acessório e a linha não tem preço, não carrega para o próximo item
-if ((contextoProduto === "Acessório") && !extrairPreco(linha)) {
+if (
+  (contextoProduto === "Acessório") &&
+  !extrairPreco(linha) &&
+  !linhaPareceProdutoApple
+) {
   continue;
 }
 
