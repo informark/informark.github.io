@@ -892,15 +892,32 @@ function normalizarStorageParaLimite(armazenamento) {
   return "";
 }
 
-// =========================
-// 5.x) INFERÊNCIA DE CONDIÇÃO (somente por tabelas + folgas)
-// Regra:
-// - Se preco <= (maxSeminovo - 150) => Seminovo
-// - Se preco >= (maxNovo + 300) e NÃO tem bateria/"seminovo" => Novo
-// - Senão => Não informado (retorna null)
-// =========================
-const FOLGA_SEMINOVO = 150;
-const FOLGA_NOVO = 300;
+function aplicarInferenciaSeminovoPorPreco(item) {
+  if (!item || item.produto !== "iPhone") return item;
+
+  const cond = (item.condicao || "").toString().trim().toLowerCase();
+
+ 
+  if (!modeloNormalizado || !storageNormalizado) {
+    return item;
+  }
+
+  const limiteModelo = LIMITES_SEMINOVO_MAX_AVISTA?.[modeloNormalizado];
+  if (!limiteModelo) return item;
+
+  const maxAvista = limiteModelo?.[storageNormalizado];
+  if (typeof maxAvista !== "number") return item;
+
+  const preco = Number(item.valor);
+  if (!Number.isFinite(preco)) return item;
+
+  if (preco <= maxAvista) {
+    item.condicao = "Seminovo";
+  }
+
+  return item;
+}
+
 
 function temBateriaOuSeminovoNoTexto(texto) {
   const t = normTxt(texto);
@@ -917,10 +934,7 @@ const FOLGA_NOVO_SEM_SEMI = 500;
 
 function inferirCondicaoPorTabelas({ produto, modelo, armazenamento, preco, descricao }) {
   // mantém suas regras de MacBook aqui (igual está)
-  if (produto === "MacBook") {
-    // ... seu bloco atual ...
-    return null;
-  }
+  
 
   if (produto !== "iPhone") return null;
 
@@ -940,12 +954,9 @@ function inferirCondicaoPorTabelas({ produto, modelo, armazenamento, preco, desc
   const textoPuxaSemi = temBateriaOuSeminovoNoTexto(descricao || "");
 
   // 1) SEMINOVO: só se estiver no corredor [maxSemi - JANELA_SEMI, maxSemi]
-  if (maxSemi != null) {
-    const minSemi = Number(maxSemi) - JANELA_SEMI;
-
-    if (p >= minSemi && p <= Number(maxSemi)) {
-      return "Seminovo";
-    }
+  if (maxSemi != null && p <= Number(maxSemi)) {
+  return "Seminovo";
+}
 
     // abaixo do corredor => suspeito (não classifica)
     if (p < minSemi) {
@@ -970,9 +981,6 @@ function inferirCondicaoPorTabelas({ produto, modelo, armazenamento, preco, desc
   // ✅ caso exista seminovo e novo (mantém sua lógica atual por “corredor”)
   const minNovo = Number(maxSemi) + GAP_NOVO;
 
-  // aqui você pode manter o teto do novo OU liberar acima também:
-  // - se quiser liberar acima: p >= minNovo
-  // - se quiser manter teto: p <= maxNovo
   if (p >= minNovo) {
     return "Novo";
   }
@@ -984,7 +992,7 @@ function inferirCondicaoPorTabelas({ produto, modelo, armazenamento, preco, desc
 // aplica só quando estiver "Não informado"
 function aplicarInferenciaSeNaoInformado(condicaoAtual, payload) {
   const c = (condicaoAtual || "").toString().trim().toLowerCase();
-  if (c !== "não informado" && c !== "nao informado") return condicaoAtual;
+  if (c !== "" && c !== "não informado" && c !== "nao informado") return condicaoAtual;
 
   const inferida = inferirCondicaoPorTabelas(payload);
   return inferida ? inferida : condicaoAtual;
@@ -3216,6 +3224,22 @@ if (produto === "MacBook") {
   preco,
   descricao: bloco
 });
+
+// Inferência de Seminovo por preço (somente quando não informado no texto)
+if (
+  produto === "iPhone" &&
+  (!condicao || condicao === "Não informado")
+) {
+  const modeloKey = normalizarModeloIphoneParaLimite(modelo);
+  const storageKey = normalizarStorageParaLimite(armazenamento);
+
+  const limiteModelo = LIMITES_SEMINOVO_MAX_AVISTA?.[modeloKey];
+  const limite = limiteModelo?.[storageKey];
+
+  if (typeof limite === "number" && preco <= limite) {
+    condicao = "Seminovo";
+  }
+}
 
     let descricaoItem = buffer.join(" | ");
     descricaoItem = descricaoItem.replace(/\b(lacrados?|novo(s)?|seminovos?|usados?)\b/gi, "").trim();
