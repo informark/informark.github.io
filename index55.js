@@ -11,7 +11,6 @@ const qrcode = require("qrcode-terminal");
 const fs = require("fs");
 
 const ARQUIVO_CSV = "precos.csv";
-const ARQUIVO_CSV_DIA = "preco_dia.csv";
 const ARQUIVO_ULTIMO_RELATORIO = "ultimo_relatorio.txt";
 const ARQUIVO_PROMOCOES = "promocoes_enviadas.csv";
 
@@ -1020,24 +1019,24 @@ function inferirCondicaoPorTabelas({
   preco,
   descricao,
 }) {
-  //iPad 11 Retorna novo / seminovo
 
-  if (produto === "iPad") {
-    const modeloTxt = (modelo || "").toString().toLowerCase();
-    const p = Number(preco);
+    //iPad 11 Retorna novo
 
-    if (!Number.isFinite(p)) return null;
+    if (produto === "iPad") {
+  const modeloTxt = (modelo || "").toString().toLowerCase();
+  const p = Number(preco);
 
-    const ehIpad11 = /\b11\b/.test(modeloTxt);
+  if (!Number.isFinite(p)) return null;
 
-    if (ehIpad11) {
-      if (temBateriaOuSeminovoNoTexto(descricao || "")) return null;
-      if (p >= 2200) return "Novo";
-      if (p < 2200) return "Seminovo";
-    }
+  const ehIpad11 = /\b11\b/.test(modeloTxt);
 
-    return null;
+  if (ehIpad11) {
+    if (temBateriaOuSeminovoNoTexto(descricao || "")) return null;
+    if (p > 2200) return "Novo";
   }
+
+  return null;
+}
   if (produto !== "iPhone") return null;
 
   const p = Number(preco);
@@ -1116,51 +1115,13 @@ function podeEnviarPromo(
 // =========================
 // 6) CSV + VCARD + EXTRAÇÕES
 // =========================
-const CSV_HEADER = "Produto,Modelo,Armazenamento,Cor,Condicao,Preco,Descricao,Data,HoraRecebida,Vendedor,Numero,Grupo\n";
-
 function garantirCSV() {
   if (!fs.existsSync(ARQUIVO_CSV)) {
-    fs.writeFileSync(ARQUIVO_CSV, CSV_HEADER);
+    fs.writeFileSync(
+      ARQUIVO_CSV,
+      "Produto,Modelo,Armazenamento,Cor,Condicao,Preco,Descricao,Data,HoraRecebida,Vendedor,Numero,Grupo\n",
+    );
   }
-}
-
-function garantirCSVDia() {
-  if (!fs.existsSync(ARQUIVO_CSV_DIA)) {
-    fs.writeFileSync(ARQUIVO_CSV_DIA, CSV_HEADER);
-  }
-}
-
-function resetarCSVDia() {
-  fs.writeFileSync(ARQUIVO_CSV_DIA, CSV_HEADER);
-  console.log("🔄 preco_dia.csv zerado para novo dia");
-}
-
-let ultimoDiaCSV = hojeISO_BR();
-
-function verificarResetDiario() {
-  const hoje = hojeISO_BR();
-  if (hoje !== ultimoDiaCSV) {
-    resetarCSVDia();
-    ultimoDiaCSV = hoje;
-    try { fs.writeFileSync(ARQUIVO_DIA_RESET, hoje); } catch (e) {}
-  }
-}
-
-const ARQUIVO_DIA_RESET = ".preco_dia_data.txt";
-
-function verificarResetNaInicializacao() {
-  garantirCSVDia();
-  const hoje = hojeISO_BR();
-  try {
-    const ultimaData = fs.readFileSync(ARQUIVO_DIA_RESET, "utf8").trim();
-    if (ultimaData !== hoje) {
-      resetarCSVDia();
-    }
-  } catch (e) {
-    resetarCSVDia();
-  }
-  fs.writeFileSync(ARQUIVO_DIA_RESET, hoje);
-  ultimoDiaCSV = hoje;
 }
 
 function formatarPrecoCSVBR(valor) {
@@ -1222,8 +1183,6 @@ function salvarLinhaCSV({
   )}","${esc(descricao)}","${esc(data)}","${esc(horaRecebida)}","${esc(nome)}","${esc(numero)}","${esc(grupo)}"\n`;
 
   fs.appendFileSync(ARQUIVO_CSV, linhaCSV);
-  garantirCSVDia();
-  fs.appendFileSync(ARQUIVO_CSV_DIA, linhaCSV);
 }
 
 function sanitizarModeloParaSalvar(produto, modelo) {
@@ -3990,7 +3949,7 @@ function montarMensagemPromo({
   return (
     `🔥 OFERTA DISPONÍVEL 🔥\n\n` +
     `${tituloProduto}\n` +
-    ` ��� À vista: R$ ${Number(precoAvista).toFixed(2).replace(".", ",")}` +
+    `💰 À vista: R$ ${Number(precoAvista).toFixed(2).replace(".", ",")}` +
     `${linhaCartao}\n` +
     `${linhaConfig}${linhaCondicao}${linhaCores}${linhaBateria}${linhaDesc}` +
     `📲 Chama no privado`
@@ -4150,8 +4109,6 @@ client.on("ready", async () => {
   carregarJblUltimo();
   carregarNovosUltimo();
   garantirCSV();
-  verificarResetNaInicializacao();
-  setInterval(verificarResetDiario, 60 * 1000);
 
   if (!relatorioJaGeradoHoje()) {
     gerarRelatorioMenorPrecoDoDia();
