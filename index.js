@@ -1019,6 +1019,24 @@ function inferirCondicaoPorTabelas({
   preco,
   descricao,
 }) {
+
+    //iPad 11 Retorna novo
+
+    if (produto === "iPad") {
+  const modeloTxt = (modelo || "").toString().toLowerCase();
+  const p = Number(preco);
+
+  if (!Number.isFinite(p)) return null;
+
+  const ehIpad11 = /\b11\b/.test(modeloTxt);
+
+  if (ehIpad11) {
+    if (temBateriaOuSeminovoNoTexto) return null;
+    if (p > 2200) return "Novo";
+  }
+
+  return null;
+}
   if (produto !== "iPhone") return null;
 
   const p = Number(preco);
