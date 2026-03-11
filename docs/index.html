@@ -230,7 +230,7 @@
         <section class="hero">
             <h1>Informark Dashboard</h1>
             <p>Painel de acompanhamento de pre&ccedil;os e relat&oacute;rios do bot.</p>
-            <div class="pill">Atualizado em 11/03/2026 05:33:31</div>
+            <div class="pill">Atualizado em 11/03/2026 05:34:32</div>
         </section>
 
         <section class="stats">
@@ -257,7 +257,7 @@
         </section>
 
         <section class="main-card">
-            <div class="meta">&Uacute;ltima atualiza&ccedil;&atilde;o: 11/03/2026 05:33:31</div>
+            <div class="meta">&Uacute;ltima atualiza&ccedil;&atilde;o: 11/03/2026 05:34:32</div>
 
             <div class="tabs">
                 <button class="tab-btn active" onclick="abrirAba('abaRelatorio', this, 'Menor PreÃ§o')">Menor Pre&ccedil;o</button>
@@ -265,7 +265,7 @@
             </div>
 
             <div id="abaRelatorio" class="tab-content active">
-                <div class="subtitulo">Arquivo base: Nenhum relatÃ³rio encontrado</div>
+                <div class="subtitulo">Arquivo base: relatorio_menor_preco_2026-03-11.csv</div>
 
                 <div class="filtros">
                     <input type="text" id="buscaRelatorio" placeholder="Buscar no relat&oacute;rio...">
@@ -283,7 +283,72 @@
                 </div>
 
                 <div class="resumo" id="resumoRelatorio"></div>
-                <p>Nenhum dado encontrado.</p>
+                <div class="table-wrap">
+    <table id="tabelaRelatorio">
+        <thead>
+            <tr>
+<th>Produto</th>
+<th>Modelo</th>
+<th>Armazenamento</th>
+<th>Cor</th>
+<th>Condicao</th>
+<th>MenorPreco</th>
+<th>Descricao</th>
+<th>Data</th>
+<th>HoraRecebida</th>
+<th>Vendedor</th>
+<th>Numero</th>
+<th>Grupo</th>
+
+            </tr>
+        </thead>
+        <tbody>
+<tr>
+<td>iPhone</td>
+<td>13 Pro Max</td>
+<td>128GB</td>
+<td>branco</td>
+<td>Seminovo</td>
+<td>2300,00</td>
+<td>iPhone 13 Pro Max 128gb branco | Bat 71% | Mensagem de tela , oled ( tela top ) | R$ 2300</td>
+<td>2026-03-11</td>
+<td>05:34:01</td>
+<td>Renato Lima</td>
+<td>=&quot;558488187690&quot;</td>
+<td>P̶E̶I̶X̶A̶D̶A̶ ̶C̶E̶L̶L̶ ̶2̶0̶2̶5̶ ̶̶ ̶ ̶</td>
+</tr>
+<tr>
+<td>iPhone</td>
+<td>13 Pro Max</td>
+<td>128GB</td>
+<td>cinza</td>
+<td>Seminovo</td>
+<td>2300,00</td>
+<td>iPhone 13 Pro Max 128gb cinza | Bat 74% | Mensagem de tela , tela oled top | 2300</td>
+<td>2026-03-11</td>
+<td>05:34:02</td>
+<td>Renato Lima</td>
+<td>=&quot;558488187690&quot;</td>
+<td>P̶E̶I̶X̶A̶D̶A̶ ̶C̶E̶L̶L̶ ̶2̶0̶2̶5̶ ̶̶ ̶ ̶</td>
+</tr>
+<tr>
+<td>iPhone</td>
+<td>12 Pro Max</td>
+<td>256GB</td>
+<td>&quot;</td>
+<td>Seminovo</td>
+<td>2350,00</td>
+<td>iPhone 12 Pro Max 256gb | Bat 87% | R$ 2350</td>
+<td>2026-03-11</td>
+<td>05:34:03</td>
+<td>Renato Lima</td>
+<td>=&quot;558488187690&quot;</td>
+<td>P̶E̶I̶X̶A̶D̶A̶ ̶C̶E̶L̶L̶ ̶2̶0̶2̶5̶ ̶̶ ̶ ̶</td>
+</tr>
+
+        </tbody>
+    </table>
+</div>
             </div>
 
             <div id="abaPrecos" class="tab-content">
@@ -305,7 +370,72 @@
                 </div>
 
                 <div class="resumo" id="resumoPrecos"></div>
-                <p>Nenhum dado encontrado.</p>
+                <div class="table-wrap">
+    <table id="tabelaPrecos">
+        <thead>
+            <tr>
+<th>Produto</th>
+<th>Modelo</th>
+<th>Armazenamento</th>
+<th>Cor</th>
+<th>Condicao</th>
+<th>Preco</th>
+<th>Descricao</th>
+<th>Data</th>
+<th>HoraRecebida</th>
+<th>Vendedor</th>
+<th>Numero</th>
+<th>Grupo</th>
+
+            </tr>
+        </thead>
+        <tbody>
+<tr>
+<td>iPhone</td>
+<td>13 Pro Max</td>
+<td>128GB</td>
+<td>branco</td>
+<td>Seminovo</td>
+<td>2300,00</td>
+<td>iPhone 13 Pro Max 128gb branco | Bat 71% | Mensagem de tela , oled ( tela top ) | R$ 2300</td>
+<td>2026-03-11</td>
+<td>05:34:01</td>
+<td>Renato Lima</td>
+<td>558488187690</td>
+<td>P̶E̶I̶X̶A̶D̶A̶ ̶C̶E̶L̶L̶ ̶2̶0̶2̶5̶ ̶̶ ̶ ̶</td>
+</tr>
+<tr>
+<td>iPhone</td>
+<td>13 Pro Max</td>
+<td>128GB</td>
+<td>cinza</td>
+<td>Seminovo</td>
+<td>2300,00</td>
+<td>iPhone 13 Pro Max 128gb cinza | Bat 74% | Mensagem de tela , tela oled top | 2300</td>
+<td>2026-03-11</td>
+<td>05:34:02</td>
+<td>Renato Lima</td>
+<td>558488187690</td>
+<td>P̶E̶I̶X̶A̶D̶A̶ ̶C̶E̶L̶L̶ ̶2̶0̶2̶5̶ ̶̶ ̶ ̶</td>
+</tr>
+<tr>
+<td>iPhone</td>
+<td>12 Pro Max</td>
+<td>256GB</td>
+<td></td>
+<td>Seminovo</td>
+<td>2350,00</td>
+<td>iPhone 12 Pro Max 256gb | Bat 87% | R$ 2350</td>
+<td>2026-03-11</td>
+<td>05:34:03</td>
+<td>Renato Lima</td>
+<td>558488187690</td>
+<td>P̶E̶I̶X̶A̶D̶A̶ ̶C̶E̶L̶L̶ ̶2̶0̶2̶5̶ ̶̶ ̶ ̶</td>
+</tr>
+
+        </tbody>
+    </table>
+</div>
             </div>
         </section>
     </div>
