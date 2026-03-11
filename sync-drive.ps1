@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Force -Path $destino | Out-Null
 $arquivosFixos = @(
     "precos.csv",
     "promocoes_enviadas.csv",
-    "preco_dia.xlsx"
+    "preco_dia.csv"
 )
 
 foreach ($arquivo in $arquivosFixos) {
