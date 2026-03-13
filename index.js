@@ -3533,6 +3533,16 @@ function extrairItensDeLista(texto) {
 
     if (/^\s*(com\s*nf|c\/nf|nf)\s*$/i.test(low)) continue;
 
+    // Ignora linhas de parcelamento ("💳 Ou 10x de R$ 669,90")
+    if (/^💳/.test(linha) && /\b\d+\s*x\b/i.test(linha)) continue;
+
+    // Ignora linhas de garantia/fechamento sem produto ("🛡️ Com garantia | 💰 R$ 2.900")
+    if (
+      /^🛡/.test(linha) &&
+      !/\b(iphone|ipad|macbook|airpods|watch|jbl|samsung|garmin|xiaomi|motorola)\b/i.test(linha)
+    ) continue;
+    
+
     const cat = detectarCategoriaTitulo(linha);
     if (cat) {
       contextoProduto = cat;
@@ -3865,6 +3875,24 @@ function extrairItensDeLista(texto) {
         produto = inf.produto;
         modelo = inf.modelo;
         armazenamento = armazenamento || inf.armazenamento;
+      }
+    }
+
+    if (produto === "Outro") {
+      const detFull = detectarProduto(texto);
+      if (detFull && detFull !== "Outro") {
+        produto = detFull;
+        if (!modelo || modelo === "Não informado")
+          modelo = extrairModelo(texto, produto);
+        if (!armazenamento) {
+          const mArm = texto.match(/\b(64|128|256|512)\s*gb\b/i);
+          if (mArm) armazenamento = mArm[1].toUpperCase() + "GB";
+        }
+      } else if (/\b(aw\s*)?(ultra\s*\d|series\s*\d+)\b/i.test(texto)) {
+        produto = "Apple Watch";
+        if (!modelo || modelo === "Não informado")
+          modelo = extrairModelo(texto, "Apple Watch");
+        armazenamento = "";
       }
     }
 
