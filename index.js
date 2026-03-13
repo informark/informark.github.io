@@ -3513,16 +3513,7 @@ function extrairItensDeLista(texto) {
     if (
       !extrairPreco(linha) &&
       !ehLinhaProduto &&
-      /\b(semi[-\s]?novos?|seminovos?|usados?|vitrine|revisados?)\b/i.test(low)
-    ) {
-      contextoCondicao = "Seminovo";
-      buffer = [];
-      continue;
-    }
-
-    if (
-      !extrairPreco(linha) &&
-      !ehLinhaProduto &&
+      buffer.length === 0 &&
       /\b(lacrados?|novo(s)?|zero|selado(s)?)\b/i.test(low) &&
       !/\b(bateria\s*nov|tela\s*nov)\b/i.test(low)
     ) {
@@ -3866,33 +3857,6 @@ function extrairItensDeLista(texto) {
         if (!armazenamento) {
           armazenamento = inf2.armazenamento;
         }
-      }
-    }
-
-    if (!contextoProduto && produto === "Outro") {
-      const inf = inferirIphoneSemPalavra(bloco);
-      if (inf) {
-        produto = inf.produto;
-        modelo = inf.modelo;
-        armazenamento = armazenamento || inf.armazenamento;
-      }
-    }
-
-    if (produto === "Outro") {
-      const detFull = detectarProduto(texto);
-      if (detFull && detFull !== "Outro") {
-        produto = detFull;
-        if (!modelo || modelo === "Não informado")
-          modelo = extrairModelo(texto, produto);
-        if (!armazenamento) {
-          const mArm = texto.match(/\b(64|128|256|512)\s*gb\b/i);
-          if (mArm) armazenamento = mArm[1].toUpperCase() + "GB";
-        }
-      } else if (/\b(aw\s*)?(ultra\s*\d|series\s*\d+)\b/i.test(texto)) {
-        produto = "Apple Watch";
-        if (!modelo || modelo === "Não informado")
-          modelo = extrairModelo(texto, "Apple Watch");
-        armazenamento = "";
       }
     }
 
