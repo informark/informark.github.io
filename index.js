@@ -1304,10 +1304,15 @@ function normalizarNumeroPreco(bruto) {
   if (s.includes(",") && s.includes(".")) {
     s = s.replace(/\./g, "").replace(",", ".");
   }
-  // caso BR sem milhar: 2350,00
-  else if (s.includes(",")) {
-    s = s.replace(",", ".");
-  }
+    // caso BR sem milhar: 2350,00
+    // caso US milhar: 8,899 → 8899
+    else if (s.includes(",")) {
+      if (/^\d{1,3},\d{3}$/.test(s)) {
+        s = s.replace(",", ""); // "8,899" → "8899"
+      } else {
+        s = s.replace(",", ".");
+      }
+    }
   // caso 5.150
   else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
     s = s.replace(/\./g, "");
