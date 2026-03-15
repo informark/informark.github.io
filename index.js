@@ -1506,6 +1506,15 @@ function extrairPrecoFallbackUltimoNumero(texto) {
         continue;
       }
 
+      // ignora ano em contexto de data/garantia (ex: "setembro/2026", "garantia até 03/2026")
+      if (
+        /^(19|20)\d{2}$/.test(numeroTexto.trim()) &&
+        (linha.slice(0, inicio).trim().endsWith("/") ||
+          /\b(garantia|validade|vencimento|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/i.test(linha))
+      ) {
+        continue;
+      }
+
       const candidato = normalizarNumeroPreco(numeroTexto);
       if (candidato === null) continue;
 
@@ -3533,6 +3542,17 @@ function extrairItensDeLista(texto) {
       !/\bsemi\b/i.test(low)
     ) {
       contextoCondicao = "Novo";
+      buffer = [];
+      continue;
+    }
+
+    if (
+      !extrairPreco(linha) &&
+      !ehLinhaProduto &&
+      buffer.length === 0 &&
+      /\b(seminovos?|usado(s)?|vitrine)\b/i.test(low)
+    ) {
+      contextoCondicao = "Seminovo";
       buffer = [];
       continue;
     }
