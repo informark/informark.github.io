@@ -17,7 +17,8 @@ const ARQUIVO_PROMOCOES = "promocoes_enviadas.csv";
 
 const ARQUIVO_ENVIADOS = "enviados.json";
 //const DEDUPE_JANELA_MS = 30 * 60 * 1000; // 30 minutos
-const DEDUPE_JANELA_MS = 12 * 60 * 60 * 1000; // 12 horas
+const DIFF_MINIMA_PRECO = 200; // R$ mínimo de diferença para reenviar mesmo produto
+const DEDUPE_JANELA_MS = 24 * 60 * 60 * 1000; // 24 horas
 const ARQUIVO_JBL_ULTIMO = "jbl_ultimo.json"; // guarda o último preço enviado por modelo
 
 let jblUltimoCache = {}; // { "JBL|JBL BOOMBOX 4": { ts: 123, preco: 2700 } }
@@ -117,7 +118,7 @@ function novoPodeEnviarPorPreco({
   const lastPreco = Number(last.preco);
   const atual = Number(novoPreco);
 
-  return atual < lastPreco; // só manda se for menor
+  return lastPreco - atual >= DIFF_MINIMA_PRECO; // só manda se for R$200+ menor
 }
 
 function novoMarcarEnviado({
@@ -157,9 +158,8 @@ function jblPodeEnviarPorPreco({ produto, modelo, novoPreco }) {
 
   const lastPreco = Number(last.preco);
   const atual = Number(novoPreco);
-
-  // só envia se for menor
-  return atual < lastPreco;
+  // só envia se for R$200+ menor
+  return lastPreco - atual >= DIFF_MINIMA_PRECO;
 }
 
 function jblMarcarEnviado({ modelo, novoPreco }) {
@@ -950,7 +950,7 @@ const LIMITES_NOVO_MAX_AVISTA = {
   "17 Pro": { "256GB": 7701.0 },
 
 
-  "17 Pro Max": { "256GB": 8901.0 },
+  "17 Pro Max": { "256GB": 8701.0 },
 };
 
 const REGRA_SEMINOVO = { addMax: 0, minDiff: 500 };
@@ -3533,10 +3533,10 @@ function extrairItensDeLista(texto) {
         low,
       ) ||
       /📱/.test(linha);
+
     if (
       !extrairPreco(linha) &&
       !ehLinhaProduto &&
-      buffer.length === 0 &&
       /\b(lacrados?|novo(s)?|zero|selado(s)?)\b/i.test(low) &&
       !/\b(bateria\s*nov|tela\s*nov)\b/i.test(low) &&
       !/\bsemi\b/i.test(low)
@@ -3549,7 +3549,6 @@ function extrairItensDeLista(texto) {
     if (
       !extrairPreco(linha) &&
       !ehLinhaProduto &&
-      buffer.length === 0 &&
       /\b(seminovos?|usado(s)?|vitrine)\b/i.test(low)
     ) {
       contextoCondicao = "Seminovo";
